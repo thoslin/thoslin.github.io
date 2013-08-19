@@ -3,11 +3,11 @@
 # ----------------------- #
 
 url: http://thoslin.github.io
-title: Tom Lin's Thoughts and Writings
+title: Tom Lin's thoughts and writings
 subtitle: A blogging framework for hackers.
-author: Tom Lin
+author: Tom
 simple_search: http://google.com/search
-description: Hi! My name is Tom Lin. I'm a Python web developer living in Shanghai. This is my personal website and blog.
+description: I'm a Python web developer living in Shanghai. This is my personal website and blog.
 
 # Default date format is "ordinal" (resulting in "July 22nd 2007")
 # You can customize the format as defined in
