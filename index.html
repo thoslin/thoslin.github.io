@@ -1,0 +1,519 @@
+<html>
+  <head>
+    
+      <title>Tom Lin's thoughts and writings</title>
+    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <script type="text/javascript">
+      WebFontConfig = {
+        google: { families: [ 'Droid+Sans::latin' ] }
+      };
+      (function() {
+        var wf = document.createElement('script');
+        wf.src = ('https:' == document.location.protocol ? 'https' : 'http') +
+          '://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js';
+        wf.type = 'text/javascript';
+        wf.async = 'true';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(wf, s);
+      })();
+    </script>
+    <link rel="stylesheet" type="text/css" href="/stylesheets/screen.css">
+  </head>
+  <body>
+    <header id="spine">
+    <h1 id="hey">
+        <a href="/">Hi,<br/> I'm Tom.</a>
+    </h1>
+    <p class="description">
+    I'm a Python web developer living in Shanghai. This is my personal website and blog.
+</p>
+    <div id="profiles">
+    <a href="/">Blog</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://github.com/thoslin">Github</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://twitter.com/thoslin">Twitter</a>
+</div>
+    <div id="recent">
+    <h5 class="heading">Recent <a href="/archive/" id="full-archive">(Full archive &rarr;)</a></h5>
+    <ol>
+        <li>
+          <a href="/dive-into-django-template-engine/">Dive into Django template engine</a>
+        </li>
+        
+        <li>
+          <a href="/python-unicode-and-bytestring-revisit/">Python unicode and bytestring revisit</a>
+        </li>
+    </ol>
+</div>
+    <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
+</header>
+    <section id="content">
+      
+  
+  
+  <article>
+  <div class="meta">
+    <time>06 Aug 2013</time>
+  </div>
+  <h1>Dive into Django template engine</h1>
+  
+  <h3>Motives</h3>
+
+<p>This is an excerpt from Django documentation <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags">Writing custom template tags</a></p>
+
+<blockquote><p>Above, this document explained that the template system works in a two-step process: compiling and rendering. To define a custom template tag, you specify how the compilation works and how the rendering works.</p><p>When Django compiles a template, it splits the raw template text into ‘’nodes’‘. Each node is an instance of django.template.Node and has a render() method. A compiled template is, simply, a list of Node objects. When you call render() on a compiled template object, the template calls render() on each Node in its node list, with the given context. The results are all concatenated together to form the output of the template.</p><p>Thus, to define a custom template tag, you specify how the raw template tag is converted into a Node (the compilation function), and what the node’s render() method does.</p></blockquote>
+
+
+<p>The above is the explanation from django docs about how django template works and how to write a custom template tag. Honestly the first time I skimmed through this piece I didn&rsquo;t quite get it. and I just skipped it. While django provides decorators like simple_tag, inlucsion_tag which ease the process of writing templatetags. I found no difficulty in using templatetags. So it&rsquo;s like a black box put away in the dungeon which I never bother to open up again.</p>
+
+<p>But a few weeks ago when I was reading some templatetag code from a github repo. I found it hard to get what&rsquo;s going on. I was baffled. And this was not the first time it happened. Also as a self-proclaimed djangonaut : D. I feel this is humiliating. I feel the need to open that box and release the black magic.</p>
+
+<h3>Let the code speak</h3>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">Template</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template_string</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+</span><span class='line'>                 <span class="n">name</span><span class="o">=</span><span class="s">&#39;&lt;Unknown Template&gt;&#39;</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">template_string</span> <span class="o">=</span> <span class="n">smart_unicode</span><span class="p">(</span><span class="n">template_string</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">except</span> <span class="ne">UnicodeDecodeError</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">raise</span> <span class="n">TemplateEncodingError</span><span class="p">(</span><span class="s">&quot;Templates can only be constructed &quot;</span>
+</span><span class='line'>                                        <span class="s">&quot;from unicode or UTF-8 strings.&quot;</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">TEMPLATE_DEBUG</span> <span class="ow">and</span> <span class="n">origin</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">origin</span> <span class="o">=</span> <span class="n">StringOrigin</span><span class="p">(</span><span class="n">template_string</span><span class="p">)</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span> <span class="o">=</span> <span class="n">compile_string</span><span class="p">(</span><span class="n">template_string</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">for</span> <span class="n">subnode</span> <span class="ow">in</span> <span class="n">node</span><span class="p">:</span>
+</span><span class='line'>                <span class="k">yield</span> <span class="n">subnode</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">_render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="s">&quot;Display stage -- can be called many times&quot;</span>
+</span><span class='line'>        <span class="n">context</span><span class="o">.</span><span class="n">render_context</span><span class="o">.</span><span class="n">push</span><span class="p">()</span>
+</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">finally</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">context</span><span class="o">.</span><span class="n">render_context</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">NodeList</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
+</span><span class='line'>    <span class="c"># Set to True the first time a non-TextNode is inserted by</span>
+</span><span class='line'>    <span class="c"># extend_nodelist().</span>
+</span><span class='line'>    <span class="n">contains_nontext</span> <span class="o">=</span> <span class="bp">False</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">Node</span><span class="p">):</span>
+</span><span class='line'>                <span class="n">bit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_node</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+</span><span class='line'>            <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>                <span class="n">bit</span> <span class="o">=</span> <span class="n">node</span>
+</span><span class='line'>            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">force_unicode</span><span class="p">(</span><span class="n">bit</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">mark_safe</span><span class="p">(</span><span class="s">u&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bits</span><span class="p">))</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">get_nodes_by_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodetype</span><span class="p">):</span>
+</span><span class='line'>        <span class="s">&quot;Return a list of all nodes of the given type&quot;</span>
+</span><span class='line'>        <span class="n">nodes</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">nodes</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">get_nodes_by_type</span><span class="p">(</span><span class="n">nodetype</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">nodes</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">render_node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">node</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This class quite explains the two-step process: compling and rendering. Basically template is broken down into a list of Node objects after compling and then django will iterate through the node list and call render method on all Node objects and join the results. That&rsquo;s the rendering.</p>
+
+<p>As compared to rendering process, compling is a more complicated process, during which template strings are translated into meaningful Python code. There are also two steps in compiling. First Lexer would tear the template string apart into small pieces(Token objects) based on predefined tokens like
+&ldquo;{{&rdquo; &ldquo;{%&rdquo;
+ for further processing.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="kn">from</span> <span class="nn">django.template.base</span> <span class="kn">import</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">Parser</span><span class="p">,</span> <span class="n">Template</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="n">lexer</span> <span class="o">=</span> <span class="n">Lexer</span><span class="p">(</span><span class="s">&quot;Hello {{ username }}, {% block content%}Welcome{</span><span class="si">% e</span><span class="s">ndblock %}&quot;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="n">tokens</span> <span class="o">=</span> <span class="n">lexer</span><span class="o">.</span><span class="n">tokenize</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
+</span><span class='line'>   <span class="o">...</span><span class="p">:</span>     <span class="k">print</span> <span class="n">token</span>
+</span><span class='line'>   <span class="o">...</span><span class="p">:</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;Hello ...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Var</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;username...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;, ...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Block</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;block content...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;Welcome...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Block</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;endblock...&quot;</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Parser then picks up those tokens and change them into corresponding Node objects.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">5</span><span class="p">]:</span> <span class="n">parser</span> <span class="o">=</span> <span class="n">Parser</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">6</span><span class="p">]:</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">()</span>
+</span><span class='line'><span class="n">Out</span><span class="p">[</span><span class="mi">6</span><span class="p">]:</span>
+</span><span class='line'><span class="p">[</span><span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;Hello &#39;</span><span class="o">&gt;</span><span class="p">,</span>
+</span><span class='line'> <span class="o">&lt;</span><span class="n">Variable</span> <span class="n">Node</span><span class="p">:</span> <span class="n">username</span><span class="o">&gt;</span><span class="p">,</span>
+</span><span class='line'> <span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;, &#39;</span><span class="o">&gt;</span><span class="p">,</span>
+</span><span class='line'> <span class="o">&lt;</span><span class="n">Block</span> <span class="n">Node</span><span class="p">:</span> <span class="n">content</span><span class="o">.</span> <span class="n">Contents</span><span class="p">:</span> <span class="p">[</span><span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;Welcome&#39;</span><span class="o">&gt;</span><span class="p">]</span><span class="o">&gt;</span><span class="p">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Let&rsquo;s take a look at Parser class:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">Parser</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tokens</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">tokens</span> <span class="o">=</span> <span class="n">tokens</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">tags</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">filters</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">lib</span> <span class="ow">in</span> <span class="n">builtins</span><span class="p">:</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">add_library</span><span class="p">(</span><span class="n">lib</span><span class="p">)</span>
+</span><span class='line'>    <span class="o">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>See that filters and tags. when initializing the parser, both default and custom template filters and template tags are loaded.
+When calling the parse method parser iterates through tokens and calls proper handler from self.tags and self.filters depending on token type. Here is where template filter and tags fit themself in.</p>
+
+<p>For example when a <Block token: "block content..."> is met, parser would call self.tags[&lsquo;block&rsquo;]， pass itself and token to the handler and expect a Node object returned.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="nd">@register.tag</span><span class="p">(</span><span class="s">&#39;block&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">do_block</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="n">token</span><span class="p">):</span>
+</span><span class='line'>    <span class="sd">&quot;&quot;&quot;</span>
+</span><span class='line'><span class="sd">    Define a block that can be overridden by child templates.</span>
+</span><span class='line'><span class="sd">    &quot;&quot;&quot;</span>
+</span><span class='line'>    <span class="n">bits</span> <span class="o">=</span> <span class="n">token</span><span class="o">.</span><span class="n">contents</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+</span><span class='line'>    <span class="o">...</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">BlockNode</span><span class="p">(</span><span class="n">block_name</span><span class="p">,</span> <span class="n">nodelist</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So this is what a template tag should look like. Accept parser and token and return a Node. And what a Node class has to do is to implement a render method.</p>
+
+<p>For more details, check the code lives in django/template/base.py and
+recheck <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags">the docs</a>. It should make more sense.</p>
+
+<h3>Not deep enough</h3>
+
+<p>Well. I just get this deep so far : ) If you want more there&rsquo;s an <a href="http://www.pocoo.org/~blackbird/django-templates-blogpost.html">interesting blogpost</a> written by Armin Rocher, the author of <a href="https://github.com/mitsuhiko/jinja2">Jinja2</a>, explaining why django template is slow. Come on. Let&rsquo;s dive in.</p>
+
+</article>
+  <div class="sep">&nbsp;</div>
+
+  
+  
+  <article>
+  <div class="meta">
+    <time>11 Mar 2012</time>
+  </div>
+  <h1>Python unicode and bytestring revisit</h1>
+  
+  <h3>Unicode</h3>
+
+<ul>
+<li>unicode的字符集几乎包含了世界上所有文字，它用code point来表示每一个字符</li>
+<li>utf8 encoding是一种unicode的编码方法</li>
+<li>utf8使用1-4个字节来存储unicode字符，utf16使用2-4个字节，而utf32使用定长的4个字节</li>
+</ul>
+
+
+<h3>Bytestring</h3>
+
+<p>在Python中用单引号，双引号或者三引号括起来的字符都是str（确切地说是str的string literal），它们的实际值，在不同的系统不尽相同（ASCII码例外）。</p>
+
+<p>在windows下</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span> <span class="o">=</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xc8\xcb</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;cp936&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">u&#39;</span><span class="se">\u4eba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="k">print</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;cp936&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="err">人</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而在ubuntu下</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span> <span class="o">=</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">u&#39;</span><span class="se">\u4eba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="k">print</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="err">人</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>可见，对于str，Python使用了系统的默认编码（而不是Python默认的ascii编码）进行编码</p>
+
+<h3>Confusion</h3>
+
+<p>Why u&#8221;你好&#8221; works while &ldquo;你好&rdquo; doesn&rsquo;t?</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;你好&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+</span><span class='line'><span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+</span><span class='line'><span class="ne">UnicodeDecodeError</span><span class="p">:</span> <span class="s">&#39;ascii&#39;</span> <span class="n">codec</span> <span class="n">can</span><span class="s">&#39;t decode byte 0xe4 in position 0: ordinal not in range(128)</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">u&quot;你好&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xbd\xa0\xe5\xa5\xbd</span><span class="s">&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>首先，对于<strong>encode</strong>操作，错误里报&#8221;..can&rsquo;t <strong>decode</strong>..&ldquo;，这个追过代码没追到，在Stackoverflow上提问，有同学帮忙解决了，看<a href="http://stackoverflow.com/a/9644206/523517">这里</a>。</p>
+
+<p>其次，对于为什么同是对literal进行encode， unicode literal就不会报错呢。</p>
+
+<p>在<a href="http://docs.python.org/release/3.0.1/whatsnew/3.0.html#text-vs-data-instead-of-unicode-vs-8-bit">What’s New In Python 3.0</a>找到了答案：</p>
+
+<blockquote><p>The biggest difference with the 2.x situation is that any attempt to mix text and data in Python 3.0 raises TypeError, whereas if you were to mix Unicode and 8-bit strings in Python 2.x, it would work if the 8-bit string happened to contain only 7-bit (ASCII) bytes, but you would get UnicodeDecodeError if it contained non-ASCII values. This value-specific behavior has caused numerous sad faces over the years.</p></blockquote>
+
+<p>这么说来还是Python 2.X自身的问题了。在2.X的版本中，string和bytes使用的数据类型都是str，所以str既是字面值(literal)，也是二进制值(binary)。</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&#39;</span><span class="se">\x61</span><span class="s">&#39;</span>
+</span><span class='line'><span class="s">&#39;a&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而且很容易造成混淆的是ASCII码的字面值和二进制值都是用字面值表示</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&#39;a&#39;</span>
+</span><span class='line'><span class="s">&#39;a&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这对于ASCII码来说无所谓，但如果str包含了非ASCII码的字符，在encode的时候就会报上述错。而在Py3k中，这两者被区分开了</p>
+
+<blockquote><p>Python 3.0 uses the concepts of text and (binary) data instead of Unicode strings and 8-bit strings. All text is Unicode; however encoded Unicode is represented as binary data. The type used to hold text is str, the type used to hold data is bytes.</p>
+
+<p>You can no longer use u&#8221;&hellip;&ldquo; literals for Unicode text. However, you must use b&rdquo;&hellip;&ldquo; literals for binary data.</p></blockquote>
+
+<p>在Py3k下运行的结果</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">u&quot;人&quot;</span>
+</span><span class='line'><span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span>
+</span><span class='line'><span class="s">u&quot;人&quot;</span>
+</span><span class='line'>   <span class="o">^</span>
+</span><span class='line'><span class="ne">SyntaxError</span><span class="p">:</span> <span class="n">invalid</span> <span class="n">syntax</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="s">&#39;人&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">type</span><span class="p">(</span><span class="s">&quot;人&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="o">&lt;</span><span class="k">class</span> <span class="err">&#39;</span><span class="nc">str</span><span class="s">&#39;&gt;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+</span><span class='line'><span class="n">b</span><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">b</span><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;人&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+</span><span class='line'><span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+</span><span class='line'><span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+</span><span class='line'><span class="ne">AttributeError</span><span class="p">:</span> <span class="s">&#39;str&#39;</span> <span class="nb">object</span> <span class="n">has</span> <span class="n">no</span> <span class="n">attribute</span> <span class="s">&#39;decode&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在<a href="https://docs.djangoproject.com/en/dev/ref/unicode/#general-string-handling">Django的字符串处理</a>中，Django假设所有的str都使用了UTF8编码，如果在某些涉及到中文的地方使用了str就很容易造成错误，所以在使用字符串这种类型的时候，最好统一使用unicode。</p>
+
+<p>最后，可以通过更改解释器的默认编码来避免上述问题，当然这种做法已经deprecated了。</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">sys</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">sys</span><span class="o">.</span><span class="n">getdefaultencoding</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;ascii&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">reload</span><span class="p">(</span><span class="n">sys</span><span class="p">)</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">module</span> <span class="s">&#39;sys&#39;</span> <span class="p">(</span><span class="n">built</span><span class="o">-</span><span class="ow">in</span><span class="p">)</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">sys</span><span class="o">.</span><span class="n">setdefaultencoding</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">str</span><span class="p">(</span><span class="s">u&quot;人&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">unicode</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="s">&quot;人&quot;</span><span class="p">))</span>
+</span><span class='line'><span class="s">u&#39;</span><span class="se">\u4eba</span><span class="s">&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+</article>
+  <div class="sep">&nbsp;</div>
+
+<div id="full-archive">
+    <a href="/archive/">View the full archive &rarr;</a>
+</div>
+    </section>
+    <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-42896888-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+  </body>
+</html>
