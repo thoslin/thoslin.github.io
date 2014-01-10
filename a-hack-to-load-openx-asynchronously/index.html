@@ -1,0 +1,202 @@
+<html>
+  <head>
+    
+      <title>A hack to load openx asynchronously | Tom Lin's thoughts and writings</title>
+    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <script type="text/javascript">
+      WebFontConfig = {
+        google: { families: [ 'Droid+Sans::latin' ] }
+      };
+      (function() {
+        var wf = document.createElement('script');
+        wf.src = ('https:' == document.location.protocol ? 'https' : 'http') +
+          '://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js';
+        wf.type = 'text/javascript';
+        wf.async = 'true';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(wf, s);
+      })();
+    </script>
+    <link rel="stylesheet" type="text/css" href="/stylesheets/screen.css">
+  </head>
+  <body>
+    <header id="spine">
+    <h1 id="hey">
+        <a href="/">Hi,<br/> I'm Tom.</a>
+    </h1>
+    <p class="description">
+    I'm a Python web developer living in Shanghai. This is my personal website and blog.
+</p>
+    <div id="profiles">
+    <a href="/">Blog</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://github.com/thoslin">Github</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://twitter.com/thoslin">Twitter</a>
+</div>
+    <div id="recent">
+    <h5 class="heading">Recent <a href="/archive/" id="full-archive">(Full archive &rarr;)</a></h5>
+    <ol>
+        
+        <li>
+          <a href="/async-download-with-celery/">Async Download with Celery</a>
+        </li>
+        
+        <li>
+          <a href="/dive-into-django-template-engine/">Dive into Django template engine</a>
+        </li>
+        
+        <li>
+          <a href="/a-hack-to-load-openx-asynchronously/">A hack to load openx asynchronously</a>
+        </li>
+        
+        <li>
+          <a href="/python-unicode-and-bytestring-revisit/">Python unicode and bytestring revisit</a>
+        </li>
+        
+    </ol>
+</div>
+    <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
+</header>
+    <section id="content">
+      <article>
+  <div class="meta">
+    <time>20 Jul 2013</time>
+  </div>
+  <h1>A hack to load openx asynchronously</h1>
+  
+  <p>I failed to load openx asynchronously follwing their documentation. It&rsquo;s very disappointing especially when you read the fucking manual and it just doesn&rsquo;t work. So I found a way to work around it. A bit dirty but works.</p>
+
+<p>The normal openx setup is to reference the openx script in the head section. The script will issue a request to openx server to pull the ads content for the ad scripts in the body section to document.write. As you know this script will block the page load. But if you move the script to the bottom of the body, the document.write will fail.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;html&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;head&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_zones</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>                <span class="s1">&#39;top_banner&#39;</span><span class="o">:</span> <span class="mi">120</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>        <span class="c">&lt;!-- the script will issue a request to fetch the ads --&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span> <span class="na">src=</span><span class="s">&#39;http://ads.example.com/www/delivery/spcjs.php?id=7&#39;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/head&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;body&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="c1">// openx document.write the ad content</span>
+</span><span class='line'>            <span class="nx">OA_show</span><span class="p">(</span><span class="s1">&#39;top_banner&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/body&gt;</span>
+</span><span class='line'><span class="nt">&lt;/html&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>What I did is basically override the OA_show function of openx and queue the function calls and release them when the time is right.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;html&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;head&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">adQueue</span> <span class="o">=</span> <span class="p">[];</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_show</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">position</span><span class="p">,</span> <span class="nx">output</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="c1">// queue the function call and create a place holder</span>
+</span><span class='line'>                <span class="nx">adQueue</span><span class="p">.</span><span class="nx">push</span><span class="p">([</span><span class="nx">position</span><span class="p">,</span> <span class="nx">output</span><span class="p">]);</span>
+</span><span class='line'>                <span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="s2">&quot;&lt;div id=&#39;_&quot;</span><span class="o">+</span><span class="nx">position</span><span class="o">+</span><span class="s2">&quot;&#39;&gt;&lt;/div&gt;&quot;</span><span class="p">);</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/head&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;body&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;top_banner&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>                <span class="nx">OA_show</span><span class="p">(</span><span class="s1">&#39;top_banner&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span><span class='line'>            <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;/div&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_zones</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>                <span class="s1">&#39;top_banner&#39;</span><span class="o">:</span> <span class="mi">120</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span> <span class="na">src=</span><span class="s">&#39;http://ads.example.com/www/delivery/spcjs.php?id=7&#39;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="c1">// excute function calls and display ads</span>
+</span><span class='line'>            <span class="k">while</span><span class="p">(</span><span class="nx">adQueue</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nx">adQueue</span><span class="p">.</span><span class="nx">shift</span><span class="p">();</span>
+</span><span class='line'>                <span class="kd">var</span> <span class="nx">ad</span> <span class="o">=</span> <span class="nx">OA_show</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="kc">false</span><span class="p">);</span>
+</span><span class='line'>                <span class="k">if</span><span class="p">(</span><span class="nx">ad</span><span class="p">){</span>
+</span><span class='line'>                    <span class="nx">$</span><span class="p">(</span><span class="s2">&quot;#_&quot;</span><span class="o">+</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nx">html</span><span class="p">(</span><span class="nx">ad</span><span class="p">);</span>
+</span><span class='line'>                <span class="p">}</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/body&gt;</span>
+</span><span class='line'><span class="nt">&lt;/html&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>PS: Openx sucks!</p>
+
+</article>
+    </section>
+    <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-42896888-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+  </body>
+</html>
