@@ -41,6 +41,10 @@
     <ol>
         
         <li>
+          <a href="/impostor-syndrome/">Impostor syndrome</a>
+        </li>
+        
+        <li>
           <a href="/async-download-with-celery/">Async Download with Celery</a>
         </li>
         
@@ -62,6 +66,41 @@
 </header>
     <section id="content">
       
+  
+  
+  <article>
+  <div class="meta">
+    <time>30 Apr 2014</time>
+  </div>
+  <h1>Impostor syndrome</h1>
+  
+  <p>So I was browsing this year&rsquo;s Pycon <a href="http://pyvideo.org/category/50/pycon-us-2014">videos</a> and randomly checked out <a href="http://pyvideo.org/video/2659/its-dangerous-to-go-alone-battling-the-invisibl">this one</a> and it blew my mind off :O. Okay, I was being exaggerate. It&rsquo;s not about Python and actually a little off topic. It&rsquo;s about a syndrome called <a href="http://en.wikipedia.org/wiki/Impostor_syndrome">Impostor syndrome</a> which I&rsquo;ve never heard of before.</p>
+
+<blockquote><p>The impostor syndrome, sometimes called impostor phenomenon or fraud syndrome, is a psychological phenomenon in which people are unable to internalize their accomplishments. Despite external evidence of their competence, those with the syndrome remain convinced that they are frauds and do not deserve the success they have achieved. Proof of success is dismissed as luck, timing, or as a result of deceiving others into thinking they are more intelligent and competent than they believe themselves to be.</p></blockquote>
+
+<p>When I read this paragraph. I was like mother hecking lord of heaven. Is it not talking about me? This is just typical me ;) I was surprised to find out that there&rsquo;s literally a psychological term for this kind of thinking and a lot of people also sufferring from this like me.</p>
+
+<p>I admire the person who found this phenomenon and invented the term. I used to feel that I have some negative thinkings and I don&rsquo;t know how to describe it or more specificly I don&rsquo;t get to sit down peacefully and dig into myself and analyse what it is. Well someone did it.</p>
+
+<p>Now I kinda know why psychology should exist. It helps people to know themselves.</p>
+
+<p>As to how to deal with this syndrome. Most general advice I could get is don&rsquo;t be too honest. You need to fake it and live with it sometimes. Most people are faking it until they finally make it. There is no bad feelings. And here&rsquo;s a <a href="http://qr.ae/riYt7">story</a>:</p>
+
+<blockquote><p>At age 17, I was working backstage at an outdoor music concert, and was asked to walk out on stage in front of 15,000 people to give water bottles to all the performers. I was terrified. I asked my boss a barrage of questions:</p>
+
+<p>&ldquo;How should I do it?  Do I just put it in front of them?  Or hand it to them?  Do I walk behind the speakers or in front?&rdquo;</p>
+
+<p>My boss looked at me and said:</p>
+
+<p>&ldquo;Just go out there and pretend like you know what you&rsquo;re doing.&rdquo;</p>
+
+<p>I&rsquo;ve used that sentence as a mantra throughout my life whenever I&rsquo;m doing something for the first time, and it&rsquo;s helped me immensely. And over time I&rsquo;ve realized &ndash; everybody&rsquo;s faking it.  So now I just pretend like I know what I&rsquo;m doing, and before I know it, I actually do.</p></blockquote>
+
+<p>and good night!</p>
+
+</article>
+  <div class="sep">&nbsp;</div>
+
   
   
   <article>
@@ -512,135 +551,6 @@ recheck <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tag
 <h3>Not deep enough</h3>
 
 <p>Well. I just get this deep so far : ) If you want more there&rsquo;s an <a href="http://www.pocoo.org/~blackbird/django-templates-blogpost.html">interesting blogpost</a> written by Armin Rocher, the author of <a href="https://github.com/mitsuhiko/jinja2">Jinja2</a>, explaining why django template is slow. Come on. Let&rsquo;s dive in.</p>
-
-</article>
-  <div class="sep">&nbsp;</div>
-
-  
-  
-  <article>
-  <div class="meta">
-    <time>20 Jul 2013</time>
-  </div>
-  <h1>A hack to load openx asynchronously</h1>
-  
-  <p>I failed to load openx asynchronously follwing their documentation. It&rsquo;s very disappointing especially when you read the fucking manual and it just doesn&rsquo;t work. So I found a way to work around it. A bit dirty but works.</p>
-
-<p>The normal openx setup is to reference the openx script in the head section. The script will issue a request to openx server to pull the ads content for the ad scripts in the body section to document.write. As you know this script will block the page load. But if you move the script to the bottom of the body, the document.write will fail.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;html&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;head&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_zones</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>                <span class="s1">&#39;top_banner&#39;</span><span class="o">:</span> <span class="mi">120</span>
-</span><span class='line'>            <span class="p">}</span>
-</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
-</span><span class='line'>        <span class="c">&lt;!-- the script will issue a request to fetch the ads --&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span> <span class="na">src=</span><span class="s">&#39;http://ads.example.com/www/delivery/spcjs.php?id=7&#39;</span><span class="nt">&gt;&lt;/script&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/head&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;body&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="c1">// openx document.write the ad content</span>
-</span><span class='line'>            <span class="nx">OA_show</span><span class="p">(</span><span class="s1">&#39;top_banner&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
-</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/body&gt;</span>
-</span><span class='line'><span class="nt">&lt;/html&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>What I did is basically override the OA_show function of openx and queue the function calls and release them when the time is right.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;html&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;head&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="kd">var</span> <span class="nx">adQueue</span> <span class="o">=</span> <span class="p">[];</span>
-</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_show</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">position</span><span class="p">,</span> <span class="nx">output</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="c1">// queue the function call and create a place holder</span>
-</span><span class='line'>                <span class="nx">adQueue</span><span class="p">.</span><span class="nx">push</span><span class="p">([</span><span class="nx">position</span><span class="p">,</span> <span class="nx">output</span><span class="p">]);</span>
-</span><span class='line'>                <span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="s2">&quot;&lt;div id=&#39;_&quot;</span><span class="o">+</span><span class="nx">position</span><span class="o">+</span><span class="s2">&quot;&#39;&gt;&lt;/div&gt;&quot;</span><span class="p">);</span>
-</span><span class='line'>            <span class="p">}</span>
-</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/head&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;body&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;top_banner&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
-</span><span class='line'>                <span class="nx">OA_show</span><span class="p">(</span><span class="s1">&#39;top_banner&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
-</span><span class='line'>            <span class="nt">&lt;/script&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;/div&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_zones</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>                <span class="s1">&#39;top_banner&#39;</span><span class="o">:</span> <span class="mi">120</span>
-</span><span class='line'>            <span class="p">}</span>
-</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span> <span class="na">src=</span><span class="s">&#39;http://ads.example.com/www/delivery/spcjs.php?id=7&#39;</span><span class="nt">&gt;&lt;/script&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="c1">// excute function calls and display ads</span>
-</span><span class='line'>            <span class="k">while</span><span class="p">(</span><span class="nx">adQueue</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nx">adQueue</span><span class="p">.</span><span class="nx">shift</span><span class="p">();</span>
-</span><span class='line'>                <span class="kd">var</span> <span class="nx">ad</span> <span class="o">=</span> <span class="nx">OA_show</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="kc">false</span><span class="p">);</span>
-</span><span class='line'>                <span class="k">if</span><span class="p">(</span><span class="nx">ad</span><span class="p">){</span>
-</span><span class='line'>                    <span class="nx">$</span><span class="p">(</span><span class="s2">&quot;#_&quot;</span><span class="o">+</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nx">html</span><span class="p">(</span><span class="nx">ad</span><span class="p">);</span>
-</span><span class='line'>                <span class="p">}</span>
-</span><span class='line'>            <span class="p">}</span>
-</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/body&gt;</span>
-</span><span class='line'><span class="nt">&lt;/html&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>PS: Openx sucks!</p>
 
 </article>
   <div class="sep">&nbsp;</div>
