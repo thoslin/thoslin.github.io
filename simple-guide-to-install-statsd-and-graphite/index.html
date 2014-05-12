@@ -1,0 +1,346 @@
+<html>
+  <head>
+    
+      <title>Simple Guide to Install StatsD and Graphite | Tom Lin's thoughts and writings</title>
+    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <script type="text/javascript">
+      WebFontConfig = {
+        google: { families: [ 'Droid+Sans::latin' ] }
+      };
+      (function() {
+        var wf = document.createElement('script');
+        wf.src = ('https:' == document.location.protocol ? 'https' : 'http') +
+          '://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js';
+        wf.type = 'text/javascript';
+        wf.async = 'true';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(wf, s);
+      })();
+    </script>
+    <link rel="stylesheet" type="text/css" href="/stylesheets/screen.css">
+  </head>
+  <body>
+    <header id="spine">
+    <h1 id="hey">
+        <a href="/">Hi,<br/> I'm Tom.</a>
+    </h1>
+    <p class="description">
+    I'm a Python web developer living in Shanghai. This is my personal website and blog.
+</p>
+    <div id="profiles">
+    <a href="/">Blog</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://github.com/thoslin">Github</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://twitter.com/thoslin">Twitter</a>
+</div>
+    <div id="recent">
+    <h5 class="heading">Recent <a href="/archive/" id="full-archive">(Full archive &rarr;)</a></h5>
+    <ol>
+        
+        <li>
+          <a href="/simple-guide-to-install-statsd-and-graphite/">Simple Guide to Install StatsD and Graphite</a>
+        </li>
+        
+        <li>
+          <a href="/impostor-syndrome/">Impostor syndrome</a>
+        </li>
+        
+        <li>
+          <a href="/async-download-with-celery/">Async Download with Celery</a>
+        </li>
+        
+        <li>
+          <a href="/dive-into-django-template-engine/">Dive into Django template engine</a>
+        </li>
+        
+        <li>
+          <a href="/a-hack-to-load-openx-asynchronously/">A hack to load openx asynchronously</a>
+        </li>
+        
+    </ol>
+</div>
+    <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
+</header>
+    <section id="content">
+      <article>
+  <div class="meta">
+    <time>12 May 2014</time>
+  </div>
+  <h1>Simple Guide to Install StatsD and Graphite</h1>
+  
+  <p>I&rsquo;ve been playing around with <a href="https://github.com/etsy/statsd">StatD</a> and <a href="">Graphite</a> lately. It took me quite a while to set this stack up. So I think it worthwhile to write a post to walk through the whole installing and configuring process for future reference.</p>
+
+<p>Here is a checklist of all the softwares I&rsquo;m gonna use:</p>
+
+<ul>
+<li>StatD</li>
+<li>Graphite</li>
+<li><a href="http://grafana.org/">Grafana</a></li>
+<li><a href="http://gunicorn.org/">Gunicorn</a></li>
+<li>Nginx</li>
+<li><a href="http://supervisord.org/">Supervisor</a></li>
+</ul>
+
+
+<p>I&rsquo;m setting up all these stuff inside a Ubuntu precise32 <a href="http://files.vagrantup.com/precise32.box">Vagrant box</a>. If you are also using a Vagrant box, add these settings in your Vagrant file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'> <span class="n">config</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">network</span> <span class="ss">:forwarded_port</span><span class="p">,</span> <span class="ss">guest</span><span class="p">:</span> <span class="mi">80</span><span class="p">,</span> <span class="ss">host</span><span class="p">:</span> <span class="mi">8080</span>
+</span><span class='line'> <span class="n">config</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">network</span> <span class="ss">:forwarded_port</span><span class="p">,</span> <span class="ss">guest</span><span class="p">:</span> <span class="mi">8125</span><span class="p">,</span> <span class="ss">host</span><span class="p">:</span> <span class="mi">8125</span><span class="p">,</span> <span class="ss">protocol</span><span class="p">:</span> <span class="s1">&#39;udp&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Let&rsquo;s ssh into vagrant and change to root first</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> vagrant ssh
+</span><span class='line'> sudo su -
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Graphite</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install git python-virtualenv python-dev
+</span><span class='line'> virtualenv /opt/graphite
+</span><span class='line'> <span class="nb">source</span> /opt/graphite/bin/activate
+</span><span class='line'> pip install https://github.com/graphite-project/ceres/tarball/master
+</span><span class='line'> pip install whisper
+</span><span class='line'> pip install carbon
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Graphite Web</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install libcairo2-dev
+</span><span class='line'> <span class="nb">cd</span> /opt/graphite
+</span><span class='line'> git clone https://github.com/graphite-project/graphite-web.git
+</span><span class='line'> <span class="nb">cd </span>graphite-web
+</span><span class='line'> git checkout 0.9.12
+</span><span class='line'> python setup.py install
+</span><span class='line'> pip install -r requirements.txt
+</span><span class='line'> django-admin.py syncdb --settings<span class="o">=</span>graphite.settings --pythonpath<span class="o">=</span>/opt/graphite/webapp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Graphite includes a wsgi file in its installation. Just copy it for later deployment</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> cp /opt/graphite/conf/graphite.wsgi.example /opt/graphite/webapp/wsgi.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Configure Carbon</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> <span class="nb">cd</span> /opt/graphite/conf/
+</span><span class='line'> cp carbon.conf.example carbon.conf
+</span><span class='line'> cat &gt; storage-schemas.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[stats]</span>
+</span><span class='line'><span class="s">pattern = ^stats.*</span>
+</span><span class='line'><span class="s">retentions = 10s:6h,1min:6d,10min:1800d</span>
+</span><span class='line'><span class="s">EOF</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The storage schema is copied from <a href="https://github.com/etsy/statsd/blob/master/docs/graphite.md#storage-schemas">StatsD</a>. Tweak it to meet your needs.</p>
+
+<h3>Install statsd</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install nodejs
+</span><span class='line'> <span class="nb">cd</span> /opt/
+</span><span class='line'> git clone https://github.com/etsy/statsd.git
+</span><span class='line'> cat &gt; statsd/config.js <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">{</span>
+</span><span class='line'><span class="s">  graphitePort: 2003</span>
+</span><span class='line'><span class="s">, graphiteHost: &quot;127.0.0.1&quot;</span>
+</span><span class='line'><span class="s">, port: 8125</span>
+</span><span class='line'><span class="s">, backends: [ &quot;./backends/graphite&quot; ]</span>
+</span><span class='line'><span class="s">, legacyNamespace: false</span>
+</span><span class='line'><span class="s">}</span>
+</span><span class='line'><span class="s">EOF</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Grafana</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> <span class="nb">cd</span> /opt/
+</span><span class='line'> git clone https://github.com/grafana/grafana.git
+</span><span class='line'> cp grafana/src/config.sample.js grafana/src/config.js
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Change Permissions</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> adduser tom
+</span><span class='line'> chown tom:tom -R /opt/graphite /opt/statsd /opt/grafana/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Manage process with Supervisord</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install supervisor
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/gunicorn.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:gunicorn]</span>
+</span><span class='line'><span class="s">command = /opt/graphite/bin/gunicorn -b 127.0.0.1:8080 -w 2 --pythonpath /opt/graphite/webapp/ wsgi:application</span>
+</span><span class='line'><span class="s">directory = /opt/graphite/webapp/</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/statsd.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:statsd]</span>
+</span><span class='line'><span class="s">command = /usr/bin/node stats.js config.js</span>
+</span><span class='line'><span class="s">directory = /opt/statsd/</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/carbon.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:carbon]</span>
+</span><span class='line'><span class="s">command = /opt/graphite/bin/carbon-cache.py start --debug</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> supervisorctl reload
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Set up Nginx</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>server <span class="o">{</span>
+</span><span class='line'>        listen   80;
+</span><span class='line'>
+</span><span class='line'>        location / <span class="o">{</span>
+</span><span class='line'>                add_header Access-Control-Allow-Origin <span class="s2">&quot;*&quot;</span>;
+</span><span class='line'>                proxy_pass http://127.0.0.1:8080;
+</span><span class='line'>                proxy_set_header Host <span class="nv">$host</span>;
+</span><span class='line'>                proxy_set_header X-Real-IP <span class="nv">$remote_addr</span>;
+</span><span class='line'>                proxy_set_header X-Forwarded-For <span class="nv">$proxy_add_x_forwarded_for</span>;
+</span><span class='line'>        <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>        location /grafana/ <span class="o">{</span>
+</span><span class='line'>                <span class="nb">alias</span> /opt/grafana/src/;
+</span><span class='line'>                index index.html;
+</span><span class='line'>        <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install nginx
+</span><span class='line'> ln -s /etc/nginx/sites-available/graphite /etc/nginx/sites-enabled/
+</span><span class='line'> rm /etc/nginx/sites-enabled/default
+</span><span class='line'> /etc/init.d/nginx restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now go to <a href="http://127.0.0.1:8080/">http://127.0.0.1:8080/</a> for Graphite and <a href="http://127.0.0.1:8080/grafana/">http://127.0.0.1:8080/grafana/</a> for Grafana.</p>
+
+</article>
+    </section>
+    <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-42896888-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+  </body>
+</html>

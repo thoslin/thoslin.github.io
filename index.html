@@ -41,6 +41,10 @@
     <ol>
         
         <li>
+          <a href="/simple-guide-to-install-statsd-and-graphite/">Simple Guide to Install StatsD and Graphite</a>
+        </li>
+        
+        <li>
           <a href="/impostor-syndrome/">Impostor syndrome</a>
         </li>
         
@@ -56,16 +60,281 @@
           <a href="/a-hack-to-load-openx-asynchronously/">A hack to load openx asynchronously</a>
         </li>
         
-        <li>
-          <a href="/python-unicode-and-bytestring-revisit/">Python unicode and bytestring revisit</a>
-        </li>
-        
     </ol>
 </div>
     <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
 </header>
     <section id="content">
       
+  
+  
+  <article>
+  <div class="meta">
+    <time>12 May 2014</time>
+  </div>
+  <h1>Simple Guide to Install StatsD and Graphite</h1>
+  
+  <p>I&rsquo;ve been playing around with <a href="https://github.com/etsy/statsd">StatD</a> and <a href="">Graphite</a> lately. It took me quite a while to set this stack up. So I think it worthwhile to write a post to walk through the whole installing and configuring process for future reference.</p>
+
+<p>Here is a checklist of all the softwares I&rsquo;m gonna use:</p>
+
+<ul>
+<li>StatD</li>
+<li>Graphite</li>
+<li><a href="http://grafana.org/">Grafana</a></li>
+<li><a href="http://gunicorn.org/">Gunicorn</a></li>
+<li>Nginx</li>
+<li><a href="http://supervisord.org/">Supervisor</a></li>
+</ul>
+
+
+<p>I&rsquo;m setting up all these stuff inside a Ubuntu precise32 <a href="http://files.vagrantup.com/precise32.box">Vagrant box</a>. If you are also using a Vagrant box, add these settings in your Vagrant file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'> <span class="n">config</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">network</span> <span class="ss">:forwarded_port</span><span class="p">,</span> <span class="ss">guest</span><span class="p">:</span> <span class="mi">80</span><span class="p">,</span> <span class="ss">host</span><span class="p">:</span> <span class="mi">8080</span>
+</span><span class='line'> <span class="n">config</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">network</span> <span class="ss">:forwarded_port</span><span class="p">,</span> <span class="ss">guest</span><span class="p">:</span> <span class="mi">8125</span><span class="p">,</span> <span class="ss">host</span><span class="p">:</span> <span class="mi">8125</span><span class="p">,</span> <span class="ss">protocol</span><span class="p">:</span> <span class="s1">&#39;udp&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Let&rsquo;s ssh into vagrant and change to root first</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> vagrant ssh
+</span><span class='line'> sudo su -
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Graphite</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install git python-virtualenv python-dev
+</span><span class='line'> virtualenv /opt/graphite
+</span><span class='line'> <span class="nb">source</span> /opt/graphite/bin/activate
+</span><span class='line'> pip install https://github.com/graphite-project/ceres/tarball/master
+</span><span class='line'> pip install whisper
+</span><span class='line'> pip install carbon
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Graphite Web</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install libcairo2-dev
+</span><span class='line'> <span class="nb">cd</span> /opt/graphite
+</span><span class='line'> git clone https://github.com/graphite-project/graphite-web.git
+</span><span class='line'> <span class="nb">cd </span>graphite-web
+</span><span class='line'> git checkout 0.9.12
+</span><span class='line'> python setup.py install
+</span><span class='line'> pip install -r requirements.txt
+</span><span class='line'> django-admin.py syncdb --settings<span class="o">=</span>graphite.settings --pythonpath<span class="o">=</span>/opt/graphite/webapp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Graphite includes a wsgi file in its installation. Just copy it for later deployment</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> cp /opt/graphite/conf/graphite.wsgi.example /opt/graphite/webapp/wsgi.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Configure Carbon</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> <span class="nb">cd</span> /opt/graphite/conf/
+</span><span class='line'> cp carbon.conf.example carbon.conf
+</span><span class='line'> cat &gt; storage-schemas.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[stats]</span>
+</span><span class='line'><span class="s">pattern = ^stats.*</span>
+</span><span class='line'><span class="s">retentions = 10s:6h,1min:6d,10min:1800d</span>
+</span><span class='line'><span class="s">EOF</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The storage schema is copied from <a href="https://github.com/etsy/statsd/blob/master/docs/graphite.md#storage-schemas">StatsD</a>. Tweak it to meet your needs.</p>
+
+<h3>Install statsd</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install nodejs
+</span><span class='line'> <span class="nb">cd</span> /opt/
+</span><span class='line'> git clone https://github.com/etsy/statsd.git
+</span><span class='line'> cat &gt; statsd/config.js <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">{</span>
+</span><span class='line'><span class="s">  graphitePort: 2003</span>
+</span><span class='line'><span class="s">, graphiteHost: &quot;127.0.0.1&quot;</span>
+</span><span class='line'><span class="s">, port: 8125</span>
+</span><span class='line'><span class="s">, backends: [ &quot;./backends/graphite&quot; ]</span>
+</span><span class='line'><span class="s">, legacyNamespace: false</span>
+</span><span class='line'><span class="s">}</span>
+</span><span class='line'><span class="s">EOF</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Grafana</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> <span class="nb">cd</span> /opt/
+</span><span class='line'> git clone https://github.com/grafana/grafana.git
+</span><span class='line'> cp grafana/src/config.sample.js grafana/src/config.js
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Change Permissions</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> adduser tom
+</span><span class='line'> chown tom:tom -R /opt/graphite /opt/statsd /opt/grafana/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Manage process with Supervisord</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install supervisor
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/gunicorn.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:gunicorn]</span>
+</span><span class='line'><span class="s">command = /opt/graphite/bin/gunicorn -b 127.0.0.1:8080 -w 2 --pythonpath /opt/graphite/webapp/ wsgi:application</span>
+</span><span class='line'><span class="s">directory = /opt/graphite/webapp/</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/statsd.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:statsd]</span>
+</span><span class='line'><span class="s">command = /usr/bin/node stats.js config.js</span>
+</span><span class='line'><span class="s">directory = /opt/statsd/</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/carbon.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:carbon]</span>
+</span><span class='line'><span class="s">command = /opt/graphite/bin/carbon-cache.py start --debug</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> supervisorctl reload
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Set up Nginx</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>server <span class="o">{</span>
+</span><span class='line'>        listen   80;
+</span><span class='line'>
+</span><span class='line'>        location / <span class="o">{</span>
+</span><span class='line'>                add_header Access-Control-Allow-Origin <span class="s2">&quot;*&quot;</span>;
+</span><span class='line'>                proxy_pass http://127.0.0.1:8080;
+</span><span class='line'>                proxy_set_header Host <span class="nv">$host</span>;
+</span><span class='line'>                proxy_set_header X-Real-IP <span class="nv">$remote_addr</span>;
+</span><span class='line'>                proxy_set_header X-Forwarded-For <span class="nv">$proxy_add_x_forwarded_for</span>;
+</span><span class='line'>        <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>        location /grafana/ <span class="o">{</span>
+</span><span class='line'>                <span class="nb">alias</span> /opt/grafana/src/;
+</span><span class='line'>                index index.html;
+</span><span class='line'>        <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install nginx
+</span><span class='line'> ln -s /etc/nginx/sites-available/graphite /etc/nginx/sites-enabled/
+</span><span class='line'> rm /etc/nginx/sites-enabled/default
+</span><span class='line'> /etc/init.d/nginx restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now go to <a href="http://127.0.0.1:8080/">http://127.0.0.1:8080/</a> for Graphite and <a href="http://127.0.0.1:8080/grafana/">http://127.0.0.1:8080/grafana/</a> for Grafana.</p>
+
+</article>
+  <div class="sep">&nbsp;</div>
+
   
   
   <article>
@@ -304,253 +573,6 @@ it needs. The workers will start processing in the background. Meanwhile the res
 <p>And make sure you set CELERY_IGNORE_RESULT to False and get result backend setting right. Otherwise tasks may be stuck in pending state.</p>
 
 <p>That&rsquo;s it. Happy hacking!</p>
-
-</article>
-  <div class="sep">&nbsp;</div>
-
-  
-  
-  <article>
-  <div class="meta">
-    <time>06 Aug 2013</time>
-  </div>
-  <h1>Dive into Django template engine</h1>
-  
-  <h3>Motives</h3>
-
-<p>This is an excerpt from Django documentation <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags">Writing custom template tags</a></p>
-
-<blockquote><p>Above, this document explained that the template system works in a two-step process: compiling and rendering. To define a custom template tag, you specify how the compilation works and how the rendering works.</p><p>When Django compiles a template, it splits the raw template text into ‘’nodes’‘. Each node is an instance of django.template.Node and has a render() method. A compiled template is, simply, a list of Node objects. When you call render() on a compiled template object, the template calls render() on each Node in its node list, with the given context. The results are all concatenated together to form the output of the template.</p><p>Thus, to define a custom template tag, you specify how the raw template tag is converted into a Node (the compilation function), and what the node’s render() method does.</p></blockquote>
-
-
-<p>The above is the explanation from django docs about how django template works and how to write a custom template tag. Honestly the first time I skimmed through this piece I didn&rsquo;t quite get it. and I just skipped it. While django provides decorators like simple_tag, inlucsion_tag which ease the process of writing templatetags. I found no difficulty in using templatetags. So it&rsquo;s like a black box put away in the dungeon which I never bother to open up again.</p>
-
-<p>But a few weeks ago when I was reading some templatetag code from a github repo. I found it hard to get what&rsquo;s going on. I was baffled. And this was not the first time it happened. Also as a self-proclaimed djangonaut : D. I feel this is humiliating. I feel the need to open that box and release the black magic.</p>
-
-<h3>Let the code speak</h3>
-
-<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">Template</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template_string</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
-</span><span class='line'>                 <span class="n">name</span><span class="o">=</span><span class="s">&#39;&lt;Unknown Template&gt;&#39;</span><span class="p">):</span>
-</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
-</span><span class='line'>            <span class="n">template_string</span> <span class="o">=</span> <span class="n">smart_unicode</span><span class="p">(</span><span class="n">template_string</span><span class="p">)</span>
-</span><span class='line'>        <span class="k">except</span> <span class="ne">UnicodeDecodeError</span><span class="p">:</span>
-</span><span class='line'>            <span class="k">raise</span> <span class="n">TemplateEncodingError</span><span class="p">(</span><span class="s">&quot;Templates can only be constructed &quot;</span>
-</span><span class='line'>                                        <span class="s">&quot;from unicode or UTF-8 strings.&quot;</span><span class="p">)</span>
-</span><span class='line'>        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">TEMPLATE_DEBUG</span> <span class="ow">and</span> <span class="n">origin</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-</span><span class='line'>            <span class="n">origin</span> <span class="o">=</span> <span class="n">StringOrigin</span><span class="p">(</span><span class="n">template_string</span><span class="p">)</span>
-</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span> <span class="o">=</span> <span class="n">compile_string</span><span class="p">(</span><span class="n">template_string</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
-</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span><span class="p">:</span>
-</span><span class='line'>            <span class="k">for</span> <span class="n">subnode</span> <span class="ow">in</span> <span class="n">node</span><span class="p">:</span>
-</span><span class='line'>                <span class="k">yield</span> <span class="n">subnode</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">_render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-</span><span class='line'>        <span class="s">&quot;Display stage -- can be called many times&quot;</span>
-</span><span class='line'>        <span class="n">context</span><span class="o">.</span><span class="n">render_context</span><span class="o">.</span><span class="n">push</span><span class="p">()</span>
-</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
-</span><span class='line'>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
-</span><span class='line'>        <span class="k">finally</span><span class="p">:</span>
-</span><span class='line'>            <span class="n">context</span><span class="o">.</span><span class="n">render_context</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">class</span> <span class="nc">NodeList</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
-</span><span class='line'>    <span class="c"># Set to True the first time a non-TextNode is inserted by</span>
-</span><span class='line'>    <span class="c"># extend_nodelist().</span>
-</span><span class='line'>    <span class="n">contains_nontext</span> <span class="o">=</span> <span class="bp">False</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-</span><span class='line'>        <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
-</span><span class='line'>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">Node</span><span class="p">):</span>
-</span><span class='line'>                <span class="n">bit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_node</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
-</span><span class='line'>            <span class="k">else</span><span class="p">:</span>
-</span><span class='line'>                <span class="n">bit</span> <span class="o">=</span> <span class="n">node</span>
-</span><span class='line'>            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">force_unicode</span><span class="p">(</span><span class="n">bit</span><span class="p">))</span>
-</span><span class='line'>        <span class="k">return</span> <span class="n">mark_safe</span><span class="p">(</span><span class="s">u&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bits</span><span class="p">))</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">get_nodes_by_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodetype</span><span class="p">):</span>
-</span><span class='line'>        <span class="s">&quot;Return a list of all nodes of the given type&quot;</span>
-</span><span class='line'>        <span class="n">nodes</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
-</span><span class='line'>            <span class="n">nodes</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">get_nodes_by_type</span><span class="p">(</span><span class="n">nodetype</span><span class="p">))</span>
-</span><span class='line'>        <span class="k">return</span> <span class="n">nodes</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">render_node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-</span><span class='line'>        <span class="k">return</span> <span class="n">node</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This class quite explains the two-step process: compling and rendering. Basically template is broken down into a list of Node objects after compling and then django will iterate through the node list and call render method on all Node objects and join the results. That&rsquo;s the rendering.</p>
-
-<p>As compared to rendering process, compling is a more complicated process, during which template strings are translated into meaningful Python code. There are also two steps in compiling. First Lexer would tear the template string apart into small pieces(Token objects) based on predefined tokens like
-&ldquo;{{&rdquo; &ldquo;{%&rdquo;
- for further processing.</p>
-
-<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="kn">from</span> <span class="nn">django.template.base</span> <span class="kn">import</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">Parser</span><span class="p">,</span> <span class="n">Template</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="n">lexer</span> <span class="o">=</span> <span class="n">Lexer</span><span class="p">(</span><span class="s">&quot;Hello {{ username }}, {% block content%}Welcome{</span><span class="si">% e</span><span class="s">ndblock %}&quot;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="n">tokens</span> <span class="o">=</span> <span class="n">lexer</span><span class="o">.</span><span class="n">tokenize</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
-</span><span class='line'>   <span class="o">...</span><span class="p">:</span>     <span class="k">print</span> <span class="n">token</span>
-</span><span class='line'>   <span class="o">...</span><span class="p">:</span>
-</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;Hello ...&quot;</span><span class="o">&gt;</span>
-</span><span class='line'><span class="o">&lt;</span><span class="n">Var</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;username...&quot;</span><span class="o">&gt;</span>
-</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;, ...&quot;</span><span class="o">&gt;</span>
-</span><span class='line'><span class="o">&lt;</span><span class="n">Block</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;block content...&quot;</span><span class="o">&gt;</span>
-</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;Welcome...&quot;</span><span class="o">&gt;</span>
-</span><span class='line'><span class="o">&lt;</span><span class="n">Block</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;endblock...&quot;</span><span class="o">&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Parser then picks up those tokens and change them into corresponding Node objects.</p>
-
-<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">5</span><span class="p">]:</span> <span class="n">parser</span> <span class="o">=</span> <span class="n">Parser</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">6</span><span class="p">]:</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">()</span>
-</span><span class='line'><span class="n">Out</span><span class="p">[</span><span class="mi">6</span><span class="p">]:</span>
-</span><span class='line'><span class="p">[</span><span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;Hello &#39;</span><span class="o">&gt;</span><span class="p">,</span>
-</span><span class='line'> <span class="o">&lt;</span><span class="n">Variable</span> <span class="n">Node</span><span class="p">:</span> <span class="n">username</span><span class="o">&gt;</span><span class="p">,</span>
-</span><span class='line'> <span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;, &#39;</span><span class="o">&gt;</span><span class="p">,</span>
-</span><span class='line'> <span class="o">&lt;</span><span class="n">Block</span> <span class="n">Node</span><span class="p">:</span> <span class="n">content</span><span class="o">.</span> <span class="n">Contents</span><span class="p">:</span> <span class="p">[</span><span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;Welcome&#39;</span><span class="o">&gt;</span><span class="p">]</span><span class="o">&gt;</span><span class="p">]</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Let&rsquo;s take a look at Parser class:</p>
-
-<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">Parser</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tokens</span><span class="p">):</span>
-</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">tokens</span> <span class="o">=</span> <span class="n">tokens</span>
-</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">tags</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">filters</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span class='line'>        <span class="k">for</span> <span class="n">lib</span> <span class="ow">in</span> <span class="n">builtins</span><span class="p">:</span>
-</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">add_library</span><span class="p">(</span><span class="n">lib</span><span class="p">)</span>
-</span><span class='line'>    <span class="o">...</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>See that filters and tags. when initializing the parser, both default and custom template filters and template tags are loaded.
-When calling the parse method parser iterates through tokens and calls proper handler from self.tags and self.filters depending on token type. Here is where template filter and tags fit themself in.</p>
-
-<p>For example when a <Block token: "block content..."> is met, parser would call self.tags[&lsquo;block&rsquo;]， pass itself and token to the handler and expect a Node object returned.</p>
-
-<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="nd">@register.tag</span><span class="p">(</span><span class="s">&#39;block&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="k">def</span> <span class="nf">do_block</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="n">token</span><span class="p">):</span>
-</span><span class='line'>    <span class="sd">&quot;&quot;&quot;</span>
-</span><span class='line'><span class="sd">    Define a block that can be overridden by child templates.</span>
-</span><span class='line'><span class="sd">    &quot;&quot;&quot;</span>
-</span><span class='line'>    <span class="n">bits</span> <span class="o">=</span> <span class="n">token</span><span class="o">.</span><span class="n">contents</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-</span><span class='line'>    <span class="o">...</span>
-</span><span class='line'>    <span class="k">return</span> <span class="n">BlockNode</span><span class="p">(</span><span class="n">block_name</span><span class="p">,</span> <span class="n">nodelist</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So this is what a template tag should look like. Accept parser and token and return a Node. And what a Node class has to do is to implement a render method.</p>
-
-<p>For more details, check the code lives in django/template/base.py and
-recheck <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags">the docs</a>. It should make more sense.</p>
-
-<h3>Not deep enough</h3>
-
-<p>Well. I just get this deep so far : ) If you want more there&rsquo;s an <a href="http://www.pocoo.org/~blackbird/django-templates-blogpost.html">interesting blogpost</a> written by Armin Rocher, the author of <a href="https://github.com/mitsuhiko/jinja2">Jinja2</a>, explaining why django template is slow. Come on. Let&rsquo;s dive in.</p>
 
 </article>
   <div class="sep">&nbsp;</div>
