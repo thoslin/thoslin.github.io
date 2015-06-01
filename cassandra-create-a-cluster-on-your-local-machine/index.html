@@ -1,0 +1,243 @@
+<html>
+  <head>
+    
+      <title>Cassandra: Create a cluster on your local machine | Tom Lin's thoughts and writings</title>
+    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <script type="text/javascript">
+      WebFontConfig = {
+        google: { families: [ 'Droid+Sans::latin' ] }
+      };
+      (function() {
+        var wf = document.createElement('script');
+        wf.src = ('https:' == document.location.protocol ? 'https' : 'http') +
+          '://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js';
+        wf.type = 'text/javascript';
+        wf.async = 'true';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(wf, s);
+      })();
+    </script>
+    <link rel="stylesheet" type="text/css" href="/stylesheets/screen.css">
+  </head>
+  <body>
+    <header id="spine">
+    <h1 id="hey">
+        <a href="/">Hi,<br/> I'm Tom.</a>
+    </h1>
+    <p class="description">
+    I'm a Python web developer living in Shanghai. This is my personal website and blog.
+</p>
+    <div id="profiles">
+    <a href="/">Blog</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://github.com/thoslin">Github</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://twitter.com/thoslin">Twitter</a>
+</div>
+    <div id="recent">
+    <h5 class="heading">Recent <a href="/archive/" id="full-archive">(Full archive &rarr;)</a></h5>
+    <ol>
+        
+        <li>
+          <a href="/cassandra-create-a-cluster-on-your-local-machine/">Cassandra: Create a cluster on your local machine</a>
+        </li>
+        
+        <li>
+          <a href="/simple-guide-to-install-statsd-and-graphite/">Simple Guide to Install StatsD and Graphite</a>
+        </li>
+        
+        <li>
+          <a href="/impostor-syndrome/">Impostor syndrome</a>
+        </li>
+        
+        <li>
+          <a href="/async-download-with-celery/">Async Download with Celery</a>
+        </li>
+        
+        <li>
+          <a href="/dive-into-django-template-engine/">Dive into Django template engine</a>
+        </li>
+        
+    </ol>
+</div>
+    <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
+</header>
+    <section id="content">
+      <article>
+  <div class="meta">
+    <time>02 Jun 2015</time>
+  </div>
+  <h1>Cassandra: Create a cluster on your local machine</h1>
+  
+  <p>This post will guide you through how to create a Cassandra cluster of multiple node on a local machine.</p>
+
+<p>First, Let&rsquo;s grab a copy of Cassandra, I&rsquo;m using a Ubuntu 12.04 box and gonna go with Cassandra 1.2.19.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mkdir test_cluster
+</span><span class='line'>cd test_cluster
+</span><span class='line'>wget http://www.us.apache.org/dist/cassandra/1.2.19/apache-cassandra-1.2.19-bin.tar.gz
+</span><span class='line'>tar xzf apache-cassandra-1.2.19-bin.tar.gz</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The package already includes everything needed to start a Cassandra node. You can start it by sudo bin/cassandra. It will use all the defaults to start a Cassandra node. With data under /var/lib. with no initial token. We&rsquo;re not going to do that. As we&rsquo;re creating multiple nodes. Each node gonna will have its own directory and configurations. That said,
+all nodes will share the same binaries comes within this tarball, but with different confs and directories for logs, data, commit logs.</p>
+
+<p>We will build a directory structure like this:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>node1
+</span><span class='line'>├── bin
+</span><span class='line'>├── commitlog
+</span><span class='line'>├── conf
+</span><span class='line'>├── data
+</span><span class='line'>├── logs
+</span><span class='line'>└── saved_caches</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now let&rsquo;s set up our first node:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cd test_cluster
+</span><span class='line'>mkdir node1
+</span><span class='line'>cd node1
+</span><span class='line'>mkdir commitlog data logs save_caches
+</span><span class='line'>cp -r ../apache-cassandra-1.2.19/bin .
+</span><span class='line'>cp -r ../apache-cassandra-1.2.19/conf .</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We need to make some customizations before we bootstrap this node. And before we jump into that, we should generate initial_token for each node, unless you prefer virtual node, which is recommended. Anyway I use the following command to generate tokens:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>python -c 'print [str(((2**64 / number_of_tokens) * i) - 2**63) for i in range(number_of_tokens)]'</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We&rsquo;re going to create two nodes:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>python -c 'print [str(((2**64 / 2) * i) - 2**63) for i in range(2)]'  
+</span><span class='line'>['-9223372036854775808', '0']</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can proceed with the setup:</p>
+
+<h4>conf/cassandra.yaml</h4>
+
+<p>The configuration file for Cassandra. There are couple items needs to be changed:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>commitlog_directory: /home/tom/test_cluster/node1/commitlog
+</span><span class='line'>data_file_directories:
+</span><span class='line'>- /home/tom/test_cluster/node1/data
+</span><span class='line'>initial_token: -9223372036854775808
+</span><span class='line'>listen_address: 127.0.0.1
+</span><span class='line'>rpc_address: 127.0.0.1
+</span><span class='line'>saved_caches_directory: /home/tom/test_cluster/node1/saved_caches</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>bin/cassandra.in.sh</h4>
+
+<p>The so-called include script. For seting environment variables needed by the start script bin/cassandra. We&rsquo;ll change following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>CASSANDRA_HOME=/home/tom/test_cluster/apache-cassandra-1.2.19
+</span><span class='line'>CASSANDRA_CONF=/home/tom/test_cluster/node1/conf</span></code></pre></td></tr></table></div></figure>
+
+
+<p>CASSANDRA_HOME is where the binaries live, CASSANDRA_CONF is where the conf for the node lives.</p>
+
+<h4>conf/log4j-server.properies</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>log4j.appender.R.File=/home/tom/test_cluster/node1/logs/system.log</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we&rsquo;re all set to start the node. Remember to set the CASSANDRA_INCLUDE to our cassandra.in.sh so that Cassandra will search the right place for confs.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>CASSANDRA_INCLUDE=/home/tom/test_cluster/node1/bin/cassandra.in.sh /home/tom/test_cluster/node1/bin/cassandra -f</span></code></pre></td></tr></table></div></figure>
+
+
+<p>OK. If everything goes soothly, you should have the node up and running. Now Let&rsquo;s set up a second node. Nothing special. Just repeat the above steps. Use &ldquo;node2&rdquo; instead of &ldquo;node1&rdquo; when changing configurations. And use a different listen_address and rpc_address:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>commitlog_directory: /home/tom/test_cluster/node2/commitlog
+</span><span class='line'>data_file_directories:
+</span><span class='line'>- /home/tom/test_cluster/node2/data
+</span><span class='line'>initial_token: 0
+</span><span class='line'>listen_address: 127.0.0.2
+</span><span class='line'>rpc_address: 127.0.0.2
+</span><span class='line'>saved_caches_directory: /home/tom/test_cluster/node2/saved_caches</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And remember to make an extra modification to <strong>conf/cassandra-env.sh</strong> to avoid port conflicts. Change default JMX_PORT to anything other than default 7199.
+And start the node. The node will automatically join the ring.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>~/test_cluster/node1 » bin/nodetool ring
+</span><span class='line'>Note: Ownership information does not include topology; for complete information, specify a keyspace
+</span><span class='line'>Datacenter: datacenter1
+</span><span class='line'>==========
+</span><span class='line'>Address    Rack        Status State   Load            Owns                Token                                      
+</span><span class='line'>                                                                          0                                          
+</span><span class='line'>127.0.0.1  rack1       Up     Normal  13.99 KB        50.00%              -9223372036854775808                      
+</span><span class='line'>127.0.0.2  rack1       Up     Normal  10.71 KB        50.00%              0              </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Alright. You got a cluster running on your local machine!</p>
+
+<p>Reference:
+<a href="http://wiki.apache.org/cassandra/GettingStarted">http://wiki.apache.org/cassandra/GettingStarted</a></p>
+
+</article>
+    </section>
+    <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-42896888-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+  </body>
+</html>
