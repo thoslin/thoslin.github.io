@@ -1,0 +1,24 @@
+---
+layout: post
+title: "Ramble on Java &amp; Session"
+date: 2015-09-08 22:29
+comments: true
+categories: 
+---
+Recently I've been working on some Java stuff, from JSP, Spring MVC to Hibernate. It's actually not such a smooth and comfortable switch from Python to Java, especially when building a website with frameworks. A hello world page would takes more efforts in Java comparing to Python. Part of the reason may be I'm quite a novice in the Java world, the learning curve of which is steeper than that of Python.
+
+However the previous experience on Python web development is not for nothing, to some extent, it helps me understand the concepts in Java web. I always try to find equivalents in Python when coming across a new thing in Java. For example, Tomcat/Jetty, the Java servlet container, is somewhat equivalent to WSGI containers like uWSGI, and servlet, is somewhat equivalent to WSGI. Hibernate is something like Django ORM/Sqlalchemy. Spring AOP is like decorators. Spring Controllers is somewhat like Flask views. Although there's some concepts I can't find analogies to, like dependencies injection, IoC. Python seems to be able to achieve those with the language support.
+
+During my exploration into Java web, I started building a very simple [todo list](https://github.com/thoslin/spring-todo) app on Spring MVC, just to get my hands dirty with this famed framework. When working on a simple login function for the app, I came to think how Spring handle sessions. Down below, I use Spring Security for authentication and authorization. Again, I find it is somewhat equivalent to auth/session app in Django.
+
+As I recalled, Django supports couple [session backends](https://docs.djangoproject.com/en/1.8/topics/http/sessions/#configuring-the-session-engine), by default it uses DB to store sessions. When clients first visited, a new session is created in the session table, where all session data for that single session is stored and session keys are returned in cookies. With this session key in cookie, separate requests can share data and relate to each other, as they're in a same session. When clients are authenticated, a flag is set in the session to prevent further authentication.
+
+Apparently this is not how Spring security session works, as they don't have any table created. Another session implementation I remembered is the one from Flask, which uses [secure cookie](http://werkzeug.pocoo.org/docs/0.10/contrib/securecookie/#module-werkzeug.contrib.securecookie) from werkzeug. This implementation stores user's session data(no session key in this case) in cookie. Session data is serialized and a checksum of the data is appended before sending back to client. Checksum is checked to make sure data is not tampered. However after inspecting the cookie, there's a only a cookie called JSESSIONID, which should be the id of a session, and skimming through some code of Spring security, this doesn't look like the approach adapted.
+
+So where the hell is session stored in Spring? After some googling around, I learned that A) Session is a low level api implemented in servlet container B) Tomcat stores session in memory! A little bit surprised, session is not persisted. Nevertheless in respect of performance, in memory store is absolute a winner. But the problem is also obvious, What if server crashes? What if there's a cluster of servers? How does it scale?
+
+Then I learned that, to distribute session with a cluster of servers, Tomcat supports [session replication](https://tomcat.apache.org/tomcat-6.0-doc/cluster-howto.html). And there's also a solution called "[sticky session](http://stackoverflow.com/questions/10494431/sticky-and-non-sticky-sessions)". A term never heard of before. But in fact it is just a load balance strategy that route the same client to the same server so that the client is sticked to that server, the session is kept. However as to the scenario that single server crashed, I'm not sure how Tomcat failed over that. Maybe just failed that, session is never meant to store persistent data.
+
+Tracing back to the time when I was working with Django, We tend to use a different session store other than database, such as Memcache or Redis. Rereading the Django documentation on session, I found it also supports [local memory](https://docs.djangoproject.com/en/1.8/topics/http/sessions/#using-cached-sessions), but not recommended. Tomcat also supports different [persistent storage](http://tomcat.apache.org/tomcat-5.5-doc/config/manager.html).
+
+So I've mumbled so many things about session. That is what really get me started on this post. But what I was trying to convey is that, when switching to different tech stack, surprise is not bad, as we may find that our understanding of things is not that accurate or simply wrong. But just like the analogies I make, the philosophy behind things might be the same. Dig that.
