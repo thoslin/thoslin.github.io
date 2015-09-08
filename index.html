@@ -41,6 +41,10 @@
     <ol>
         
         <li>
+          <a href="/ramble-on-java-and-session/">Ramble on Java &amp; Session</a>
+        </li>
+        
+        <li>
           <a href="/cassandra-create-a-cluster-on-your-local-machine/">Cassandra: Create a cluster on your local machine</a>
         </li>
         
@@ -56,16 +60,41 @@
           <a href="/async-download-with-celery/">Async Download with Celery</a>
         </li>
         
-        <li>
-          <a href="/dive-into-django-template-engine/">Dive into Django template engine</a>
-        </li>
-        
     </ol>
 </div>
     <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
 </header>
     <section id="content">
       
+  
+  
+  <article>
+  <div class="meta">
+    <time>08 Sep 2015</time>
+  </div>
+  <h1>Ramble on Java &amp; Session</h1>
+  
+  <p>Recently I&rsquo;ve been working on some Java stuff, from JSP, Spring MVC to Hibernate. It&rsquo;s actually not such a smooth and comfortable switch from Python to Java, especially when building a website with frameworks. A hello world page would takes more efforts in Java comparing to Python. Part of the reason may be I&rsquo;m quite a novice in the Java world, the learning curve of which is steeper than that of Python.</p>
+
+<p>However the previous experience on Python web development is not for nothing, to some extent, it helps me understand the concepts in Java web. I always try to find equivalents in Python when coming across a new thing in Java. For example, Tomcat/Jetty, the Java servlet container, is somewhat equivalent to WSGI containers like uWSGI, and servlet, is somewhat equivalent to WSGI. Hibernate is something like Django ORM/Sqlalchemy. Spring AOP is like decorators. Spring Controllers is somewhat like Flask views. Although there&rsquo;s some concepts I can&rsquo;t find analogies to, like dependencies injection, IoC. Python seems to be able to achieve those with the language support.</p>
+
+<p>During my exploration into Java web, I started building a very simple <a href="https://github.com/thoslin/spring-todo">todo list</a> app on Spring MVC, just to get my hands dirty with this famed framework. When working on a simple login function for the app, I came to think how Spring handle sessions. Down below, I use Spring Security for authentication and authorization. Again, I find it is somewhat equivalent to auth/session app in Django.</p>
+
+<p>As I recalled, Django supports couple <a href="https://docs.djangoproject.com/en/1.8/topics/http/sessions/#configuring-the-session-engine">session backends</a>, by default it uses DB to store sessions. When clients first visited, a new session is created in the session table, where all session data for that single session is stored and session keys are returned in cookies. With this session key in cookie, separate requests can share data and relate to each other, as they&rsquo;re in a same session. When clients are authenticated, a flag is set in the session to prevent further authentication.</p>
+
+<p>Apparently this is not how Spring security session works, as they don&rsquo;t have any table created. Another session implementation I remembered is the one from Flask, which uses <a href="http://werkzeug.pocoo.org/docs/0.10/contrib/securecookie/#module-werkzeug.contrib.securecookie">secure cookie</a> from werkzeug. This implementation stores user&rsquo;s session data(no session key in this case) in cookie. Session data is serialized and a checksum of the data is appended before sending back to client. Checksum is checked to make sure data is not tampered. However after inspecting the cookie, there&rsquo;s a only a cookie called JSESSIONID, which should be the id of a session, and skimming through some code of Spring security, this doesn&rsquo;t look like the approach adapted.</p>
+
+<p>So where the hell is session stored in Spring? After some googling around, I learned that A) Session is a low level api implemented in servlet container B) Tomcat stores session in memory! A little bit surprised, session is not persisted. Nevertheless in respect of performance, in memory store is absolute a winner. But the problem is also obvious, What if server crashes? What if there&rsquo;s a cluster of servers? How does it scale?</p>
+
+<p>Then I learned that, to distribute session with a cluster of servers, Tomcat supports <a href="https://tomcat.apache.org/tomcat-6.0-doc/cluster-howto.html">session replication</a>. And there&rsquo;s also a solution called &ldquo;<a href="http://stackoverflow.com/questions/10494431/sticky-and-non-sticky-sessions">sticky session</a>&rdquo;. A term never heard of before. But in fact it is just a load balance strategy that route the same client to the same server so that the client is sticked to that server, the session is kept. However as to the scenario that single server crashed, I&rsquo;m not sure how Tomcat failed over that. Maybe just failed that, session is never meant to store persistent data.</p>
+
+<p>Tracing back to the time when I was working with Django, We tend to use a different session store other than database, such as Memcache or Redis. Rereading the Django documentation on session, I found it also supports <a href="https://docs.djangoproject.com/en/1.8/topics/http/sessions/#using-cached-sessions">local memory</a>, but not recommended. Tomcat also supports different <a href="http://tomcat.apache.org/tomcat-5.5-doc/config/manager.html">persistent storage</a>.</p>
+
+<p>So I&rsquo;ve mumbled so many things about session. That is what really get me started on this post. But what I was trying to convey is that, when switching to different tech stack, surprise is not bad, as we may find that our understanding of things is not that accurate or simply wrong. But just like the analogies I make, the philosophy behind things might be the same. Dig that.</p>
+
+</article>
+  <div class="sep">&nbsp;</div>
+
   
   
   <article>
@@ -497,41 +526,6 @@ And start the node. The node will automatically join the ring.</p>
 
 
 <p>Now go to <a href="http://127.0.0.1:8080/">http://127.0.0.1:8080/</a> for Graphite and <a href="http://127.0.0.1:8080/grafana/">http://127.0.0.1:8080/grafana/</a> for Grafana.</p>
-
-</article>
-  <div class="sep">&nbsp;</div>
-
-  
-  
-  <article>
-  <div class="meta">
-    <time>30 Apr 2014</time>
-  </div>
-  <h1>Impostor syndrome</h1>
-  
-  <p>So I was browsing this year&rsquo;s Pycon <a href="http://pyvideo.org/category/50/pycon-us-2014">videos</a> and randomly checked out <a href="http://pyvideo.org/video/2659/its-dangerous-to-go-alone-battling-the-invisibl">this one</a> and it blew my mind off :O. Okay, I was being exaggerate. It&rsquo;s not about Python and actually a little off topic. It&rsquo;s about a syndrome called <a href="http://en.wikipedia.org/wiki/Impostor_syndrome">Impostor syndrome</a> which I&rsquo;ve never heard of before.</p>
-
-<blockquote><p>The impostor syndrome, sometimes called impostor phenomenon or fraud syndrome, is a psychological phenomenon in which people are unable to internalize their accomplishments. Despite external evidence of their competence, those with the syndrome remain convinced that they are frauds and do not deserve the success they have achieved. Proof of success is dismissed as luck, timing, or as a result of deceiving others into thinking they are more intelligent and competent than they believe themselves to be.</p></blockquote>
-
-<p>When I read this paragraph. I was like mother hecking lord of heaven. Is it not talking about me? This is just typical me ;) I was surprised to find out that there&rsquo;s literally a psychological term for this kind of thinking and a lot of people also sufferring from this like me.</p>
-
-<p>I admire the person who found this phenomenon and invented the term. I used to feel that I have some negative thinkings and I don&rsquo;t know how to describe it or more specificly I don&rsquo;t get to sit down peacefully and dig into myself and analyse what it is. Well someone did it.</p>
-
-<p>Now I kinda know why psychology should exist. It helps people to know themselves.</p>
-
-<p>As to how to deal with this syndrome. Most general advice I could get is don&rsquo;t be too honest. You need to fake it and live with it sometimes. Most people are faking it until they finally make it. There is no bad feelings. And here&rsquo;s a <a href="http://qr.ae/riYt7">story</a>:</p>
-
-<blockquote><p>At age 17, I was working backstage at an outdoor music concert, and was asked to walk out on stage in front of 15,000 people to give water bottles to all the performers. I was terrified. I asked my boss a barrage of questions:</p>
-
-<p>&ldquo;How should I do it?  Do I just put it in front of them?  Or hand it to them?  Do I walk behind the speakers or in front?&rdquo;</p>
-
-<p>My boss looked at me and said:</p>
-
-<p>&ldquo;Just go out there and pretend like you know what you&rsquo;re doing.&rdquo;</p>
-
-<p>I&rsquo;ve used that sentence as a mantra throughout my life whenever I&rsquo;m doing something for the first time, and it&rsquo;s helped me immensely. And over time I&rsquo;ve realized &ndash; everybody&rsquo;s faking it.  So now I just pretend like I know what I&rsquo;m doing, and before I know it, I actually do.</p></blockquote>
-
-<p>and good night!</p>
 
 </article>
   <div class="sep">&nbsp;</div>
