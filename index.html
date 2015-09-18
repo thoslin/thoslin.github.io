@@ -139,13 +139,13 @@
 
 <p>Procedure:</p>
 
-<ol>
+<ul>
 <li>Drain the node</li>
 <li>Clear snapshots</li>
 <li>Shut down the node</li>
 <li>Pack data files into a tarball.</li>
 <li>Upload the tarball to swift</li>
-</ol>
+</ul>
 
 
 <p>If something goes wrong and we want to abort the upgrade and go back to the old version. We simply retrieve the old data and unpack it to the Cassandra data file directory.</p>
@@ -190,7 +190,7 @@
 
 <p>Procedure:</p>
 
-<ol>
+<ul>
 <li>Install Cassandra 2.0.0. Before starting, set num_tokens to 1. The new version uses virtual nodes by default.</li>
 <li>Upgrade SSTables</li>
 <li>Drain and stop the node</li>
@@ -198,7 +198,7 @@
 <li>Install Cassandra 2.1.3</li>
 <li>Upgrade SSTables (Not necessary)</li>
 <li>Bring back all services</li>
-</ol>
+</ul>
 
 
 <p>The procedure looks simple and clear. While we had couple issue when doing test upgrade:</p>
