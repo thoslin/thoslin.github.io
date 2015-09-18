@@ -67,11 +67,11 @@ Below is a typical structure of one of  our Cassandra nodes:
 
 Procedure:
 
-1. Drain the node
-2. Clear snapshots
-3. Shut down the node
-4. Pack data files into a tarball.
-5. Upload the tarball to swift
+- Drain the node
+- Clear snapshots
+- Shut down the node
+- Pack data files into a tarball.
+- Upload the tarball to swift
 
 
 If something goes wrong and we want to abort the upgrade and go back to the old version. We simply retrieve the old data and unpack it to the Cassandra data file directory.
@@ -107,13 +107,13 @@ ic (1.2.6) --> ja (2.0.0) --> ka(2.1.3)
 
 Procedure:
 
-1. Install Cassandra 2.0.0. Before starting, set num_tokens to 1. The new version uses virtual nodes by default.
-2. Upgrade SSTables
-3. Drain and stop the node
-4. Remove commit logs
-5. Install Cassandra 2.1.3
-6. Upgrade SSTables (Not necessary)
-7. Bring back all services
+- Install Cassandra 2.0.0. Before starting, set num_tokens to 1. The new version uses virtual nodes by default.
+- Upgrade SSTables
+- Drain and stop the node
+- Remove commit logs
+- Install Cassandra 2.1.3
+- Upgrade SSTables (Not necessary)
+- Bring back all services
 
 
 The procedure looks simple and clear. While we had couple issue when doing test upgrade:
