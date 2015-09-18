@@ -1,0 +1,227 @@
+<html>
+  <head>
+    
+      <title>Cassandra: A Journey of Upgrade | Tom Lin's thoughts and writings</title>
+    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <script type="text/javascript">
+      WebFontConfig = {
+        google: { families: [ 'Droid+Sans::latin' ] }
+      };
+      (function() {
+        var wf = document.createElement('script');
+        wf.src = ('https:' == document.location.protocol ? 'https' : 'http') +
+          '://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js';
+        wf.type = 'text/javascript';
+        wf.async = 'true';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(wf, s);
+      })();
+    </script>
+    <link rel="stylesheet" type="text/css" href="/stylesheets/screen.css">
+  </head>
+  <body>
+    <header id="spine">
+    <h1 id="hey">
+        <a href="/">Hi,<br/> I'm Tom.</a>
+    </h1>
+    <p class="description">
+    I'm a Python web developer living in Shanghai. This is my personal website and blog.
+</p>
+    <div id="profiles">
+    <a href="/">Blog</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://github.com/thoslin">Github</a>
+    <span>&nbsp;&middot;&nbsp;</span>
+    <a target="_blank" href="http://twitter.com/thoslin">Twitter</a>
+</div>
+    <div id="recent">
+    <h5 class="heading">Recent <a href="/archive/" id="full-archive">(Full archive &rarr;)</a></h5>
+    <ol>
+        
+        <li>
+          <a href="/cassandra-a-journey-of-upgrade/">Cassandra: A Journey of Upgrade</a>
+        </li>
+        
+        <li>
+          <a href="/ramble-on-java-and-session/">Ramble on Java &amp; Session</a>
+        </li>
+        
+        <li>
+          <a href="/cassandra-create-a-cluster-on-your-local-machine/">Cassandra: Create a cluster on your local machine</a>
+        </li>
+        
+        <li>
+          <a href="/simple-guide-to-install-statsd-and-graphite/">Simple Guide to Install StatsD and Graphite</a>
+        </li>
+        
+        <li>
+          <a href="/impostor-syndrome/">Impostor syndrome</a>
+        </li>
+        
+    </ol>
+</div>
+    <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
+</header>
+    <section id="content">
+      <article>
+  <div class="meta">
+    <time>18 Sep 2015</time>
+  </div>
+  <h1>Cassandra: A Journey of Upgrade</h1>
+  
+  <p>For the past few couple months, a huge burden on my shoulder had been upgrading our Cassandra cluster from 1.2.6 to 2.1. I&rsquo;ve been investing a lot of working hours to figure out the solution. Now that it has been done, I feel it is worthwhile to write down the whole experience.</p>
+
+<h3>Why Upgrade?</h3>
+
+<p>Actually the imperative reason is that we need transaction support in one of our services. And Cassandra 2.0 introduced a new feature called light-weight transaction, although it is light-weight, it somehow can fix our issue.</p>
+
+<p>Besides that, there are also a couple of new features we can benefit from the upgrade:</p>
+
+<ul>
+<li>Improved native transport protocol. We&rsquo;re quite interested in the more stream requests over one connection. This is introduced in 2.1.</li>
+<li>Automatically paging support. We have queries for a large number of rows, this at a big chance will cause RPC timeout. Our workaround is to implements our own paging mechanism.</li>
+<li>Better counter. It is well known that Cassandra&rsquo;s distributed counter is buggy. They improve it in 2.1</li>
+</ul>
+
+
+<h3>Infrastructure</h3>
+
+<ul>
+<li>10 nodes on production. 3 nodes on other stacks.</li>
+<li>Replication factor: 3</li>
+<li>Replication strategy: Simple strategy</li>
+<li>Consistency level: CL.ONE for both read and write.</li>
+</ul>
+
+
+<h3>Upgrade Path</h3>
+
+<h4>Driver upgrade</h4>
+
+<p>We&rsquo;re using a fairly old driver Cassandra called Pycassa, which is no longer maintained. And it is based on thrift protocol, which is deprecated/ditched in the version 3, so all the new and good stuff on the native protocol has nothing to do with Pycassa. Very naturally we switched to the recommended/official driver maintained by the Datastax.</p>
+
+<p>Internally we don&rsquo;t have a layer for Cassandra, so refactoring is a lot of pain. We have to replace all the code usages of Pycassa among all services, and carefully update all unit tests.</p>
+
+<p>We also bumped into some issues when deploying with the new driver:</p>
+
+<ul>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-239">High CPU utilization when using asyncore event loop</a>. By now, this is not been fixed yet, so avoid using asycore, instead use gevent/libev.</li>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-364">Reconnect not initiated when all nodes are down</a></li>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-325">ConstantReconnectionPolicy does not work with max_attempts=None</a></li>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-237">Can&rsquo;t detect gevent monkey patch when using with uwsgi &mdash;gevent-monkey-patch option</a>. If you are monkey patch in uwsgi, use -gevent-early-monkey option.</li>
+</ul>
+
+
+<p>The driver upgrade is not as smooth as I thought. A lot of back and forth happened and it took us almost two month or so to ship the upgrade.</p>
+
+<h4>No rolling upgrade?</h4>
+
+<p>Rolling upgrade should be a default option for a cluster upgrade. But unfortunately it is not supported between major versions of Cassandra. As it is documented <a href="https://github.com/apache/cassandra/blob/trunk/NEWS.txt">here</a>. We thought about workarounds. Like building a new Cluster and syncing data between two clusters. But building a new cluster is not our option due to some &ldquo;policy&rdquo;, so we decided that we can tolerate some downtime, and that also means we will update each Cassandra instance in place.</p>
+
+<h4>Data backup and restore</h4>
+
+<p>It&rsquo;s important to have a backup of the data. In case something goes wrong, we can go back to the save point. When doing data backup, we demand that all services that access Cassandra should be stopped and keep data untouched during the process.</p>
+
+<p>Below is a typical structure of one of  our Cassandra nodes:</p>
+
+<p>/mnt/cassandra/</p>
+
+<p>── commitlog_directory</p>
+
+<p>── data_file_directories</p>
+
+<p>&ldquo;data_file_directories&rdquo; is where Cassandra data files live, our goal is to backup this directory. We&rsquo;ll do a &lsquo;<a href="http://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsDrain.html">nodetool drain</a>&rsquo; on the node, which will flush all memtables to data files. After that We&rsquo;ll pack data_file_directories into one tarball and upload it to the cloud(to prevent disk failure of node). So we&rsquo;ll have two copies of data.</p>
+
+<p>Procedure:</p>
+
+<ol>
+<li>Drain the node</li>
+<li>Clear snapshots</li>
+<li>Shut down the node</li>
+<li>Pack data files into a tarball.</li>
+<li>Upload the tarball to swift</li>
+</ol>
+
+
+<p>If something goes wrong and we want to abort the upgrade and go back to the old version. We simply retrieve the old data and unpack it to the Cassandra data file directory.</p>
+
+<p>The backup and restore procedure are automated by Ansible scripts.</p>
+
+<h4>Upgrade</h4>
+
+<p>Upgrade directly from current version 1.2.6 to 2.1 is not possible. Since pre-2.0 SSTables are not supported by 2.1. A direct upgrade to 2.1, Cassandra would fail to start and following error would be raised:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>java.lang.RuntimeException: Incompatible SSTable found. Current version ka is unable to read file: /var/lib/cassandra/data/system/schema_keyspaces/system-schema_keyspaces-ic-1. Please run upgradesstables.
+</span><span class='line'>        at org.apache.cassandra.db.ColumnFamilyStore.createColumnFamilyStore(ColumnFamilyStore.java:443) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.ColumnFamilyStore.createColumnFamilyStore(ColumnFamilyStore.java:420) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.initCf(Keyspace.java:327) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.&lt;init&gt;(Keyspace.java:280) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.open(Keyspace.java:122) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.open(Keyspace.java:99) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.SystemKeyspace.checkHealth(SystemKeyspace.java:558) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.service.CassandraDaemon.setup(CassandraDaemon.java:214) [apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.service.CassandraDaemon.activate(CassandraDaemon.java:443) [apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.service.CassandraDaemon.main(CassandraDaemon.java:532) [apache-cassandra-2.1.1.jar:2.1.1]</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So we upgraded to 2.0.0 and run upgradesstables command to upgrade SSTables. After that, we then upgrade from 2.0.0 to 2.1.</p>
+
+<p>Cassandra has an internal <a href="http://www.bajb.net/2013/03/cassandra-sstable-format-version-numbers/">version for SSTables</a>. During the upgrade, sstable version will be bumping from:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ic (1.2.6) --&gt; ja (2.0.0) --&gt; ka(2.1.3)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Procedure:</p>
+
+<ol>
+<li>Install Cassandra 2.0.0. Before starting, set num_tokens to 1. The new version uses virtual nodes by default.</li>
+<li>Upgrade SSTables</li>
+<li>Drain and stop the node</li>
+<li>Remove commit logs</li>
+<li>Install Cassandra 2.1.3</li>
+<li>Upgrade SSTables (Not necessary)</li>
+<li>Bring back all services</li>
+</ol>
+
+
+<p>The procedure looks simple and clear. While we had couple issue when doing test upgrade:</p>
+
+<ul>
+<li>After upgrade from 1.2.6 to 2.0.0, Cassandra cannot start due to out of memory. It turns out when Cassandra starts, it would read the key cache. OutOfMemory when reading key cache seems to be a <a href="http://cassandra-user-incubator-apache-org.3065146.n2.nabble.com/OOM-while-reading-key-cache-td7591267.html">known issue</a>. The solution is to <a href="http://mail-archives.apache.org/mod_mbox/cassandra-user/201307.mbox/%3C7B902431-9666-4D21-9324-8632BB6358F8@thelastpickle.com%3E">clean up caches</a> before starting up.</li>
+<li>During the upgrade to 2.1, drain failed. It is a <a href="https://issues.apache.org/jira/browse/CASSANDRA-6374">bug</a> and said to be fixed in 2.0.3. So we upgrade to 2.0.3 instead.</li>
+</ul>
+
+
+<h4>Data consistency</h4>
+
+<p>How to ensure data are not corrupted during the upgrade? I think this should be guaranteed by Cassandra. However when doing upgrade testing, we have a script to dump all Cassandra data before and after the upgrade to ensure data are not touched. This step is taken away when we&rsquo;re doing actual upgrade.</p>
+
+</article>
+    </section>
+    <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-42896888-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+  </body>
+</html>
