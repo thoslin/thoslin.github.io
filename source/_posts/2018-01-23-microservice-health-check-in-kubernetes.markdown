@@ -14,6 +14,7 @@ A health check detects the healthy status of a service, reporting whether the se
 
 ### High availability
 There are many cases when a service is started/restarted
+
 - instance/pod restart
 - service/deployment up scaling
 - rolling update
@@ -37,6 +38,7 @@ As health check is done periodically, not in a real time manner, there still cou
 # Requirements
 ## What should be checked
 As the definition of healthy may vary from service to service, depending on the service application logics, there could be many levels of healthy:
+
 - the service is up
 - the service is up and the infrastructure service used by the service is healthy
 - the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy
@@ -58,6 +60,7 @@ Response body can be empty, however attaching additional information of what is 
 
 ## Security/Access control
 The health check should be private and limited to internal access, however if it is open to public access:
+
 - For unauthenticated access, service should provide a basic health info, returning a UP/DOWN status
 - For authenticated access, service may provide more detail health info
 
