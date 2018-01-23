@@ -389,17 +389,17 @@
 </span><span class='line'>metadata:
 </span><span class='line'>  annotations:
 </span><span class='line'>    prometheus.io/healthcheck: "true"
-</span><span class='line'>  name: companyprofile-service
-</span><span class='line'>  namespace: hp
+</span><span class='line'>  name: foo-service
+</span><span class='line'>  namespace: foo
 </span><span class='line'>  labels:
-</span><span class='line'>    app: companyprofile-service
+</span><span class='line'>    app: foo-service
 </span><span class='line'>spec:
 </span><span class='line'>  ports:
 </span><span class='line'>  - port: 80
-</span><span class='line'>    targetPort: 8087
+</span><span class='line'>    targetPort: 8000
 </span><span class='line'>    protocol: TCP
 </span><span class='line'>  selector:
-</span><span class='line'>    app: companyprofile</span></code></pre></td></tr></table></div></figure>
+</span><span class='line'>    app: foo</span></code></pre></td></tr></table></div></figure>
 
 
 <h3>Blackbox exporter config</h3>
@@ -419,23 +419,19 @@
 <span class='line-number'>11</span>
 <span class='line-number'>12</span>
 <span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>scrape_configs:
-</span><span class='line'>- job_name: 'blackbox'
-</span><span class='line'>metrics_path: /probe
-</span><span class='line'>params:
-</span><span class='line'>module: [http_2xx] # Look for a HTTP 200 response.
-</span><span class='line'>static_configs:
-</span><span class='line'>- targets:
-</span><span class='line'>- http://authentication-service.hp/health # Target to probe
-</span><span class='line'>relabel_configs:
-</span><span class='line'>- source_labels: [__address__]
-</span><span class='line'>target_label: __param_target
-</span><span class='line'>- source_labels: [__param_target]
-</span><span class='line'>target_label: instance
-</span><span class='line'>- target_label: __address__
-</span><span class='line'>replacement: 127.0.0.1:9115 # Blackbox exporter.</span></code></pre></td></tr></table></div></figure>
+</pre></td><td class='code'><pre><code class=''><span class='line'>modules:
+</span><span class='line'>  http_2xx:
+</span><span class='line'>    prober: http
+</span><span class='line'>    timeout: 5s
+</span><span class='line'>    http:
+</span><span class='line'>      valid_status_codes: []  # Defaults to 2xx
+</span><span class='line'>      method: GET
+</span><span class='line'>      headers: {}
+</span><span class='line'>      no_follow_redirects: false
+</span><span class='line'>      fail_if_ssl: false
+</span><span class='line'>      fail_if_not_ssl: false
+</span><span class='line'>      fail_if_matches_regexp: []
+</span><span class='line'>      fail_if_not_matches_regexp: []</span></code></pre></td></tr></table></div></figure>
 
 
 </article>
