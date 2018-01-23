@@ -1,0 +1,2016 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Tom Lin's thoughts and writings]]></title>
+  <link href="http://thoslin.github.io/atom.xml" rel="self"/>
+  <link href="http://thoslin.github.io/"/>
+  <updated>2018-01-23T16:32:57+08:00</updated>
+  <id>http://thoslin.github.io/</id>
+  <author>
+    <name><![CDATA[Tom]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Microservice health check in Kubernetes]]></title>
+    <link href="http://thoslin.github.io/microservice-health-check-in-kubernetes/"/>
+    <updated>2018-01-23T16:31:00+08:00</updated>
+    <id>http://thoslin.github.io/microservice-health-check-in-kubernetes</id>
+    <content type="html"><![CDATA[<h1>TL;DR</h1>
+
+<p>Service should provide a standard endpoint for the purpose of health check and monitoring. The specification for the endpoint should conform to the requirements as elaborated in section <a href="#Requirements">Requirements</a>.</p>
+
+<h1>Background</h1>
+
+<h2>what is health check</h2>
+
+<p>A health check detects the healthy status of a service, reporting whether the service is able to handle requests or whether the service is in a bad state and should be restarted.</p>
+
+<h2>Why health check is needed</h2>
+
+<h3>High availability</h3>
+
+<p>There are many cases when a service is started/restarted
+&ndash; instance/pod restart
+&ndash; service/deployment up scaling
+&ndash; rolling update</p>
+
+<p>Under these circumstances, if a request is forwared to a service that is still in the middle of its starting/restarting process, it would probably fail. So we need to make sure a service is healthy to accept requests before adding it to the load balancer(kubernetes service), such that we could reduce the service down time and achieve high availability.</p>
+
+<h3>Service stability</h3>
+
+<p>Service running for a long period of time may fall into a bad state, in which service is unable to handle requests properly. In this case, service needs to be prohibited from receiving requests, until it is recovered either via restart or manual resurrection. Thus our service in all is stable.</p>
+
+<h3>Monitoring</h3>
+
+<p>A big part of the DevOps responsibilities is to monitor and maintain the health of running services. If a service goes down, appropriate actions should be undertaken to bring the service back to life. Health check informs the DevOps whether the service is malfunctioning.</p>
+
+<h2>Clients of health checks</h2>
+
+<ul>
+<li>Load balancer (Kubernetes service)</li>
+<li>Monitoring service (Prometheus probe)</li>
+<li>Pods (Readiness/Liveness probe)</li>
+</ul>
+
+
+<h2>Downsides of health check</h2>
+
+<p>As health check is done periodically, not in a real time manner, there still could be time gap before the unhealthy state is known to the clients. To mitigate the effect of this situation, a reasonable checking period should be set.</p>
+
+<h1>Requirements</h1>
+
+<h2>What should be checked</h2>
+
+<p>As the definition of healthy may vary from service to service, depending on the service application logics, there could be many levels of healthy:
+&ndash; the service is up
+&ndash; the service is up and the infrastructure service used by the service is healthy
+&ndash; the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy
+&ndash; the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy, smoke tests are passed</p>
+
+<p>Each service may define its own criteria, however the result of these checks should be certain, ie, the service is either healthy or not healthy, there should be no middle state.</p>
+
+<h2>How to expose health check to clients</h2>
+
+<ul>
+<li>The service should implement the health check in a RESTful API manner.</li>
+<li>The endpoint is unified as &ldquo;/health&rdquo;</li>
+</ul>
+
+
+<h2>How health check respond to clients</h2>
+
+<h3>Status code</h3>
+
+<ul>
+<li>200 OK for healthy</li>
+<li>503 Service Unavailable for unhealthy</li>
+</ul>
+
+
+<h3>Response body</h3>
+
+<p>Response body can be empty, however attaching additional information of what is checked and the result of the check is preferred</p>
+
+<h2>Security/Access control</h2>
+
+<p>The health check should be private and limited to internal access, however if it is open to public access:
+&ndash; For unauthenticated access, service should provide a basic health info, returning a UP/DOWN status
+&ndash; For authenticated access, service may provide more detail health info</p>
+
+<h1>Implementation</h1>
+
+<h2>Examples</h2>
+
+<p><strong>Service OK</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -XGET http://127.0.0.1:9000/health
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Type: application/json; charset=utf-8
+</span><span class='line'> 
+</span><span class='line'>{
+</span><span class='line'>    "status": "UP"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Service Unavailable</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -XGET http://127.0.0.1:9000/health
+</span><span class='line'>HTTP/1.1 503 Service Unavailable
+</span><span class='line'>Content-Type: application/json; charset=utf-8
+</span><span class='line'> 
+</span><span class='line'>{
+</span><span class='line'>    "status": "Down"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Authenticated access</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -XGET http://127.0.0.1:9000/health -H 'Authorization: Basic ZnNfbm9ybWFsOkBDZ0JkSjZOKz9TbmQhRytIJEI3'
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Type: application/json; charset=utf-8
+</span><span class='line'> 
+</span><span class='line'>{ 
+</span><span class='line'>  "status":"UP",
+</span><span class='line'>  "fooService":{ 
+</span><span class='line'>    "status":"UP",
+</span><span class='line'>    "description":"Foo service"
+</span><span class='line'>  },
+</span><span class='line'>  "mysql":{ 
+</span><span class='line'>    "status":"UP",
+</span><span class='line'>    "description":"MySQL Database",
+</span><span class='line'>    "hello":1
+</span><span class='line'>  }
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Libraries</h2>
+
+<h3>Java</h3>
+
+<p><a href="https://docs.spring.io/spring-boot/docs/current/reference/htmlsingle/#production-ready-health">Spring Boot Actuator</a></p>
+
+<h3>Go</h3>
+
+<p>N/A</p>
+
+<h1>Client Integration</h1>
+
+<h2>Kubernetes integration</h2>
+
+<p>Please refer to <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/">https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/</a></p>
+
+<p>Readiness and liveness probes can be used in parallel for the same container. Using both can ensure that traffic does not reach a container that is not ready for it, and that containers are restarted when they fail.</p>
+
+<h3>Readiness Probe</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>readinessProbe: # check if service in a healthy state, will remove pod from service/loadbalancer if probe failed
+</span><span class='line'>    httpGet:
+</span><span class='line'>        path: /health
+</span><span class='line'>        port: 9000
+</span><span class='line'>    initialDelaySeconds: 10 # start checking after 10s after pod starts. should set to a minimal value such that service able to receive requests as soon as it is ready
+</span><span class='line'>    periodSeconds: 10 # check health check api every 10 seconds
+</span><span class='line'>    timeoutSeconds: 3 # if response time is logger than 3 seconds, we consider the check as failed
+</span><span class='line'>    failureThreshold: 3  # if check fails for 3 times in a row, we consider the pod is in a bad state, pod will be restarted
+</span><span class='line'>    successThreshold: 1 # if check succeeds for once, we consider the pod is back to normal</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Liveness Probe</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>livenessProbe: # check if pod is in a bad state, will restart pod if probe failed
+</span><span class='line'>    httpGet:
+</span><span class='line'>        path: /health
+</span><span class='line'>        port: 9000
+</span><span class='line'>    initialDelaySeconds: 180 # start checking after 180s after pod starts, should be logger than service start time. Some service takes minutes to start, so we set a big value here.
+</span><span class='line'>    periodSeconds: 10 # check health check api every 10 seconds
+</span><span class='line'>    timeoutSeconds: 3 # if response time is logger than 3 seconds, we consider the check as failed
+</span><span class='line'>    failureThreshold: 3 # if check fails for 3 times in a row, we consider the pod is in a bad state, pod will be restarted
+</span><span class='line'>    successThreshold: 1 # if check succeeds for once, we consider the pod is back to normal</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Prometheus integration</h2>
+
+<p>Prometheus keeps polling health API constantly and store the result in its time series database. If health check metrics match a predefined alert rule, a alert will be triggered.</p>
+
+<h3>Scrape config</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>job_name: 'health-check'
+</span><span class='line'>  metrics_path: /probe
+</span><span class='line'>  params:
+</span><span class='line'>    module: [http_2xx]  # Look for a HTTP 200 response.
+</span><span class='line'>  kubernetes_sd_configs:
+</span><span class='line'>  - role: service
+</span><span class='line'> 
+</span><span class='line'>  relabel_configs:
+</span><span class='line'>    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_healthcheck]
+</span><span class='line'>      regex: true
+</span><span class='line'>      action: keep
+</span><span class='line'>    - source_labels: [__meta_kubernetes_service_name]
+</span><span class='line'>      target_label: service
+</span><span class='line'>    - source_labels: [__address__]
+</span><span class='line'>      regex: (.*)(:80)?
+</span><span class='line'>      target_label: __param_target
+</span><span class='line'>      replacement: ${1}/health
+</span><span class='line'>    - source_labels: [__param_target]
+</span><span class='line'>      regex: (.*)
+</span><span class='line'>      target_label: instance
+</span><span class='line'>      replacement: ${1}
+</span><span class='line'>    - source_labels: []
+</span><span class='line'>      regex: .*
+</span><span class='line'>      target_label: __address__
+</span><span class='line'>      replacement: blackbox-exporter-service:9115  # Blackbox exporter.</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Service annotation</h3>
+
+<p>Add <em>prometheus.io/healthcheck</em> annotation to Kubernetes service so that they could be discovered by the health check job.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>apiVersion: v1
+</span><span class='line'>kind: Service
+</span><span class='line'>metadata:
+</span><span class='line'>  annotations:
+</span><span class='line'>    prometheus.io/healthcheck: "true"
+</span><span class='line'>  name: companyprofile-service
+</span><span class='line'>  namespace: hp
+</span><span class='line'>  labels:
+</span><span class='line'>    app: companyprofile-service
+</span><span class='line'>spec:
+</span><span class='line'>  ports:
+</span><span class='line'>  - port: 80
+</span><span class='line'>    targetPort: 8087
+</span><span class='line'>    protocol: TCP
+</span><span class='line'>  selector:
+</span><span class='line'>    app: companyprofile</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Blackbox exporter config</h3>
+
+<p>Config a <em>http_2xx</em> module to scrape health api</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>scrape_configs:
+</span><span class='line'>- job_name: 'blackbox'
+</span><span class='line'>metrics_path: /probe
+</span><span class='line'>params:
+</span><span class='line'>module: [http_2xx] # Look for a HTTP 200 response.
+</span><span class='line'>static_configs:
+</span><span class='line'>- targets:
+</span><span class='line'>- http://authentication-service.hp/health # Target to probe
+</span><span class='line'>relabel_configs:
+</span><span class='line'>- source_labels: [__address__]
+</span><span class='line'>target_label: __param_target
+</span><span class='line'>- source_labels: [__param_target]
+</span><span class='line'>target_label: instance
+</span><span class='line'>- target_label: __address__
+</span><span class='line'>replacement: 127.0.0.1:9115 # Blackbox exporter.</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Build a simple protocol over TCP]]></title>
+    <link href="http://thoslin.github.io/build-a-simple-protocol-over-tcp/"/>
+    <updated>2015-09-24T08:13:00+08:00</updated>
+    <id>http://thoslin.github.io/build-a-simple-protocol-over-tcp</id>
+    <content type="html"><![CDATA[<p>Disclaimer: I am not an expert of TCP or designing protocols, this post is just about my learning experience of building a protocols over TCP :)</p>
+
+<h4>A rookie mistake</h4>
+
+<p>When I was playing with sockets. A rookie mistake I made is assuming that each message send implies a message receive, like the following example:</p>
+
+<p>server.py</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
+</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span><span class="p">))</span>
+</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+</span><span class='line'>    <span class="n">data</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
+</span><span class='line'>        <span class="k">break</span>
+</span><span class='line'>    <span class="k">print</span> <span class="s">&quot;Received: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">data</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>client.py</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">socket_address</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span>
+</span><span class='line'><span class="n">connection</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">socket_address</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Hello there!&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Bye bye!&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run the client. I got the following output:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">Receive</span><span class="p">:</span> <span class="n">Hello</span> <span class="n">there</span><span class="err">!</span><span class="n">Bye</span> <span class="n">bye</span><span class="err">!</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>.</p>
+
+<p>So two sends result in one receive, not two receives as expected. Hah. This is a misunderstanding of how TCP works.</p>
+
+<p>TCP is a stream oriented protocol, not a packet/message oriented protocol like UDP. I&rsquo;d like to use this analogy: TCP is like making a phone call, a connection must be established before both end is able to talk, and when you talk, data stream flows on the connection. While UDP is like you&rsquo;re sending a text message.</p>
+
+<h4>The boundary</h4>
+
+<p>However this rookie mistake got me thinking, when we&rsquo;re building an application on top of TCP socket, for example, a chatting application, how do we know where each message ends since they are a stream of data? Where&rsquo;s the boundary of two messages? There must be something up on the application level.</p>
+
+<h4>1. Delimiter</h4>
+
+<p>Back to the phone call analogy, let&rsquo;s say foo is reading a poem to bar over the phone, how does bar know when foo finishes a line? how does bar know if foo finishes the whole poem? Does the wired connection do that for you? NO. But what we know from common sense is that, there&rsquo;s a pause when you finish a line, and maybe a longer pause when you finish the poem. Similarly, maybe we can put a pause in the end of each message? Just like <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2">\r\n</a> in HTTP headers.</p>
+
+<p>Here is an improved version of the previous code using \r\n as the delimiter:</p>
+
+<p>server.py</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
+</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span><span class="p">))</span>
+</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+</span><span class='line'>    <span class="n">data</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
+</span><span class='line'>        <span class="k">break</span>
+</span><span class='line'>    <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">):</span>
+</span><span class='line'>            <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
+</span><span class='line'>                <span class="k">print</span> <span class="s">&quot;Received: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">line</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>client.py</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">socket_address</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span>
+</span><span class='line'><span class="n">connection</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">socket_address</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Hello there!</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Bye bye!</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we got the separate output:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">Received</span><span class="p">:</span> <span class="n">Hello</span> <span class="n">there</span><span class="err">!</span>
+</span><span class='line'><span class="n">Received</span><span class="p">:</span> <span class="n">Bye</span> <span class="n">bye</span><span class="err">!</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The downside of this approach is that, when dealing with a message that is longer than 1024, you just get part of the message. We might need a buffer to receive message until we get a delimiter.</p>
+
+<h4>2. Fix length or Prefix length</h4>
+
+<p>What if messages are all in fix length? Short message can be filled with empty string, something like:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Hello there!&quot;</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">140</span><span class="p">))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So server just need to keep reading fix length of bytes from socket. This works. However there is still a hard limit on the length of the message.</p>
+
+<p>What if we tell the server the length of each message beforehand? We can do that by prefixing the message with the length of it. Yes! Just like the &ldquo;Content-Length&rdquo; header in HTTP.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">make_message</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="n">x</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">make_message</span><span class="p">(</span><span class="s">&quot;Hello there!&quot;</span><span class="p">))</span>
+</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">make_message</span><span class="p">(</span><span class="s">&quot;Bye bye!&quot;</span><span class="p">))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Here we prefix each message 4 bytes string indicating the length of the message. And server will first read the 4 bytes to get the length, then read as much bytes as that. The recvall function is to get the certain length of data, otherwise with simply recv, there&rsquo;s a chance we get just part of the transmitted data. Although in local machine the chance is low.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">connection</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="nf">recvall</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">remains</span><span class="p">):</span>
+</span><span class='line'>    <span class="n">buf</span> <span class="o">=</span> <span class="s">&quot;&quot;</span>
+</span><span class='line'>    <span class="k">while</span> <span class="n">remains</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">data</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">remains</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">break</span>
+</span><span class='line'>        <span class="n">buf</span> <span class="o">+=</span> <span class="n">data</span>
+</span><span class='line'>        <span class="n">remains</span> <span class="o">-=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">buf</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+</span><span class='line'>    <span class="n">data</span> <span class="o">=</span> <span class="n">recvall</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
+</span><span class='line'>        <span class="k">break</span>
+</span><span class='line'>    <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">message</span> <span class="o">=</span> <span class="n">recvall</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">print</span> <span class="s">&quot;Received: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">message</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>At this point, we have something like a protocol over the TCP layer, which is able to achieve the original goal.</p>
+
+<h4>Native protocol of Cassandra</h4>
+
+<p>Now that we have a protocol of our own, although simple and naive, I&rsquo;d like to take a look at some serious protocol that built on TCP. Since I&rsquo;ve been working with Cassandra a lot lately. I might as well just check their protocol.</p>
+
+<p><a href="https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol.spec;hb=refs/heads/cassandra-1.2">CQL</a> is the protocol of Cassandra, which is built on TCP:</p>
+
+<p><quote>
+  The CQL binary protocol is a frame based protocol. Frames are defined as:</p>
+
+<pre><code>  0         8        16        24        32
+  +---------+---------+---------+---------+
+  | version |  flags  | stream  | opcode  |
+  +---------+---------+---------+---------+
+  |                length                 |
+  +---------+---------+---------+---------+
+  |                                       |
+  .            ...  body ...              .
+  .                                       .
+  .                                       .
+  +----------------------------------------
+</code></pre>
+
+<p></quote></p>
+
+<p>Frames can be regarded as what we called messages in previous examples. Except the first 32 bits, the length and body part is just what we used. So our approach looks practical.</p>
+
+<p>So that&rsquo;s it, there must be more technical details regarding building a full-fledged protocol, but some fundamental things should work the same.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Cassandra: A Journey of Upgrade]]></title>
+    <link href="http://thoslin.github.io/cassandra-a-journey-of-upgrade/"/>
+    <updated>2015-09-18T22:15:00+08:00</updated>
+    <id>http://thoslin.github.io/cassandra-a-journey-of-upgrade</id>
+    <content type="html"><![CDATA[<p>For the past few couple months, a huge burden on my shoulder had been upgrading our Cassandra cluster from 1.2.6 to 2.1. I&rsquo;ve been investing a lot of working hours to figure out the solution. Now that it has been done, I feel it is worthwhile to write down the whole experience.</p>
+
+<h3>Why Upgrade?</h3>
+
+<p>Actually the imperative reason is that we need transaction support in one of our services. And Cassandra 2.0 introduced a new feature called light-weight transaction, although it is light-weight, it somehow can fix our issue.</p>
+
+<p>Besides that, there are also a couple of new features we can benefit from the upgrade:</p>
+
+<ul>
+<li>Improved native transport protocol. We&rsquo;re quite interested in the more stream requests over one connection. This is introduced in 2.1.</li>
+<li>Automatically paging support. We have queries for a large number of rows, this at a big chance will cause RPC timeout. Our workaround is to implements our own paging mechanism.</li>
+<li>Better counter. It is well known that Cassandra&rsquo;s distributed counter is buggy. They improve it in 2.1</li>
+</ul>
+
+
+<h3>Infrastructure</h3>
+
+<ul>
+<li>10 nodes on production. 3 nodes on other stacks.</li>
+<li>Replication factor: 3</li>
+<li>Replication strategy: Simple strategy</li>
+<li>Consistency level: CL.ONE for both read and write.</li>
+</ul>
+
+
+<h3>Upgrade Path</h3>
+
+<h4>Driver upgrade</h4>
+
+<p>We&rsquo;re using a fairly old driver Cassandra called Pycassa, which is no longer maintained. And it is based on thrift protocol, which is deprecated/ditched in the version 3, so all the new and good stuff on the native protocol has nothing to do with Pycassa. Very naturally we switched to the recommended/official driver maintained by the Datastax.</p>
+
+<p>Internally we don&rsquo;t have a layer for Cassandra, so refactoring is a lot of pain. We have to replace all the code usages of Pycassa among all services, and carefully update all unit tests.</p>
+
+<p>We also bumped into some issues when deploying with the new driver:</p>
+
+<ul>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-239">High CPU utilization when using asyncore event loop</a>. By now, this is not been fixed yet, so avoid using asycore, instead use gevent/libev.</li>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-364">Reconnect not initiated when all nodes are down</a></li>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-325">ConstantReconnectionPolicy does not work with max_attempts=None</a></li>
+<li><a href="https://datastax-oss.atlassian.net/browse/PYTHON-237">Can&rsquo;t detect gevent monkey patch when using with uwsgi &mdash;gevent-monkey-patch option</a>. If you are monkey patch in uwsgi, use -gevent-early-monkey option.</li>
+</ul>
+
+
+<p>The driver upgrade is not as smooth as I thought. A lot of back and forth happened and it took us almost two month or so to ship the upgrade.</p>
+
+<h4>No rolling upgrade?</h4>
+
+<p>Rolling upgrade should be a default option for a cluster upgrade. But unfortunately it is not supported between major versions of Cassandra. As it is documented <a href="https://github.com/apache/cassandra/blob/trunk/NEWS.txt">here</a>. We thought about workarounds. Like building a new Cluster and syncing data between two clusters. But building a new cluster is not our option due to some &ldquo;policy&rdquo;, so we decided that we can tolerate some downtime, and that also means we will update each Cassandra instance in place.</p>
+
+<h4>Data backup and restore</h4>
+
+<p>It&rsquo;s important to have a backup of the data. In case something goes wrong, we can go back to the save point. When doing data backup, we demand that all services that access Cassandra should be stopped and keep data untouched during the process.</p>
+
+<p>Below is a typical structure of one of  our Cassandra nodes:</p>
+
+<p>/mnt/cassandra/</p>
+
+<p>── commitlog_directory</p>
+
+<p>── data_file_directories</p>
+
+<p>&ldquo;data_file_directories&rdquo; is where Cassandra data files live, our goal is to backup this directory. We&rsquo;ll do a &lsquo;<a href="http://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsDrain.html">nodetool drain</a>&rsquo; on the node, which will flush all memtables to data files. After that We&rsquo;ll pack data_file_directories into one tarball and upload it to the cloud(to prevent disk failure of node). So we&rsquo;ll have two copies of data.</p>
+
+<p>Procedure:</p>
+
+<ul>
+<li>Drain the node</li>
+<li>Clear snapshots</li>
+<li>Shut down the node</li>
+<li>Pack data files into a tarball.</li>
+<li>Upload the tarball to swift</li>
+</ul>
+
+
+<p>If something goes wrong and we want to abort the upgrade and go back to the old version. We simply retrieve the old data and unpack it to the Cassandra data file directory.</p>
+
+<p>The backup and restore procedure are automated by Ansible scripts.</p>
+
+<h4>Upgrade</h4>
+
+<p>Upgrade directly from current version 1.2.6 to 2.1 is not possible. Since pre-2.0 SSTables are not supported by 2.1. A direct upgrade to 2.1, Cassandra would fail to start and following error would be raised:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>java.lang.RuntimeException: Incompatible SSTable found. Current version ka is unable to read file: /var/lib/cassandra/data/system/schema_keyspaces/system-schema_keyspaces-ic-1. Please run upgradesstables.
+</span><span class='line'>        at org.apache.cassandra.db.ColumnFamilyStore.createColumnFamilyStore(ColumnFamilyStore.java:443) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.ColumnFamilyStore.createColumnFamilyStore(ColumnFamilyStore.java:420) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.initCf(Keyspace.java:327) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.&lt;init&gt;(Keyspace.java:280) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.open(Keyspace.java:122) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.Keyspace.open(Keyspace.java:99) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.db.SystemKeyspace.checkHealth(SystemKeyspace.java:558) ~[apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.service.CassandraDaemon.setup(CassandraDaemon.java:214) [apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.service.CassandraDaemon.activate(CassandraDaemon.java:443) [apache-cassandra-2.1.1.jar:2.1.1]
+</span><span class='line'>        at org.apache.cassandra.service.CassandraDaemon.main(CassandraDaemon.java:532) [apache-cassandra-2.1.1.jar:2.1.1]</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So we upgraded to 2.0.0 and run upgradesstables command to upgrade SSTables. After that, we then upgrade from 2.0.0 to 2.1.</p>
+
+<p>Cassandra has an internal <a href="http://www.bajb.net/2013/03/cassandra-sstable-format-version-numbers/">version for SSTables</a>. During the upgrade, sstable version will be bumping from:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ic (1.2.6) --&gt; ja (2.0.0) --&gt; ka(2.1.3)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Procedure:</p>
+
+<ul>
+<li>Install Cassandra 2.0.0. Before starting, set num_tokens to 1. The new version uses virtual nodes by default.</li>
+<li>Upgrade SSTables</li>
+<li>Drain and stop the node</li>
+<li>Remove commit logs</li>
+<li>Install Cassandra 2.1.3</li>
+<li>Upgrade SSTables (Not necessary)</li>
+<li>Bring back all services</li>
+</ul>
+
+
+<p>The procedure looks simple and clear. While we had couple issue when doing test upgrade:</p>
+
+<ul>
+<li>After upgrade from 1.2.6 to 2.0.0, Cassandra cannot start due to out of memory. It turns out when Cassandra starts, it would read the key cache. OutOfMemory when reading key cache seems to be a <a href="http://cassandra-user-incubator-apache-org.3065146.n2.nabble.com/OOM-while-reading-key-cache-td7591267.html">known issue</a>. The solution is to <a href="http://mail-archives.apache.org/mod_mbox/cassandra-user/201307.mbox/%3C7B902431-9666-4D21-9324-8632BB6358F8@thelastpickle.com%3E">clean up caches</a> before starting up.</li>
+<li>During the upgrade to 2.1, drain failed. It is a <a href="https://issues.apache.org/jira/browse/CASSANDRA-6374">bug</a> and said to be fixed in 2.0.3. So we upgrade to 2.0.3 instead.</li>
+</ul>
+
+
+<h4>Data consistency</h4>
+
+<p>How to ensure data are not corrupted during the upgrade? I think this should be guaranteed by Cassandra. However when doing upgrade testing, we have a script to dump all Cassandra data before and after the upgrade to ensure data are not touched. This step is taken away when we&rsquo;re doing actual upgrade.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Ramble on Java &amp; Session]]></title>
+    <link href="http://thoslin.github.io/ramble-on-java-and-session/"/>
+    <updated>2015-09-08T22:29:00+08:00</updated>
+    <id>http://thoslin.github.io/ramble-on-java-and-session</id>
+    <content type="html"><![CDATA[<p>Recently I&rsquo;ve been working on some Java stuff, from JSP, Spring MVC to Hibernate. It&rsquo;s actually not such a smooth and comfortable switch from Python to Java, especially when building a website with frameworks. A hello world page would takes more efforts in Java comparing to Python. Part of the reason may be I&rsquo;m quite a novice in the Java world, the learning curve of which is steeper than that of Python.</p>
+
+<p>However the previous experience on Python web development is not for nothing, to some extent, it helps me understand the concepts in Java web. I always try to find equivalents in Python when coming across a new thing in Java. For example, Tomcat/Jetty, the Java servlet container, is somewhat equivalent to WSGI containers like uWSGI, and servlet, is somewhat equivalent to WSGI. Hibernate is something like Django ORM/Sqlalchemy. Spring AOP is like decorators. Spring Controllers is somewhat like Flask views. Although there&rsquo;s some concepts I can&rsquo;t find analogies to, like dependencies injection, IoC. Python seems to be able to achieve those with the language support.</p>
+
+<p>During my exploration into Java web, I started building a very simple <a href="https://github.com/thoslin/spring-todo">todo list</a> app on Spring MVC, just to get my hands dirty with this famed framework. When working on a simple login function for the app, I came to think how Spring handle sessions. Down below, I use Spring Security for authentication and authorization. Again, I find it is somewhat equivalent to auth/session app in Django.</p>
+
+<p>As I recalled, Django supports couple <a href="https://docs.djangoproject.com/en/1.8/topics/http/sessions/#configuring-the-session-engine">session backends</a>, by default it uses DB to store sessions. When clients first visited, a new session is created in the session table, where all session data for that single session is stored and session keys are returned in cookies. With this session key in cookie, separate requests can share data and relate to each other, as they&rsquo;re in a same session. When clients are authenticated, a flag is set in the session to prevent further authentication.</p>
+
+<p>Apparently this is not how Spring security session works, as they don&rsquo;t have any table created. Another session implementation I remembered is the one from Flask, which uses <a href="http://werkzeug.pocoo.org/docs/0.10/contrib/securecookie/#module-werkzeug.contrib.securecookie">secure cookie</a> from werkzeug. This implementation stores user&rsquo;s session data(no session key in this case) in cookie. Session data is serialized and a checksum of the data is appended before sending back to client. Checksum is checked to make sure data is not tampered. However after inspecting the cookie, there&rsquo;s a only a cookie called JSESSIONID, which should be the id of a session, and skimming through some code of Spring security, this doesn&rsquo;t look like the approach adapted.</p>
+
+<p>So where the hell is session stored in Spring? After some googling around, I learned that A) Session is a low level api implemented in servlet container B) Tomcat stores session in memory! A little bit surprised, session is not persisted. Nevertheless in respect of performance, in memory store is absolute a winner. But the problem is also obvious, What if server crashes? What if there&rsquo;s a cluster of servers? How does it scale?</p>
+
+<p>Then I learned that, to distribute session with a cluster of servers, Tomcat supports <a href="https://tomcat.apache.org/tomcat-6.0-doc/cluster-howto.html">session replication</a>. And there&rsquo;s also a solution called &ldquo;<a href="http://stackoverflow.com/questions/10494431/sticky-and-non-sticky-sessions">sticky session</a>&rdquo;. A term never heard of before. But in fact it is just a load balance strategy that route the same client to the same server so that the client is sticked to that server, the session is kept. However as to the scenario that single server crashed, I&rsquo;m not sure how Tomcat failed over that. Maybe just failed that, session is never meant to store persistent data.</p>
+
+<p>Tracing back to the time when I was working with Django, We tend to use a different session store other than database, such as Memcache or Redis. Rereading the Django documentation on session, I found it also supports <a href="https://docs.djangoproject.com/en/1.8/topics/http/sessions/#using-cached-sessions">local memory</a>, but not recommended. Tomcat also supports different <a href="http://tomcat.apache.org/tomcat-5.5-doc/config/manager.html">persistent storage</a>.</p>
+
+<p>So I&rsquo;ve mumbled so many things about session. That is what really get me started on this post. But what I was trying to convey is that, when switching to different tech stack, surprise is not bad, as we may find that our understanding of things is not that accurate or simply wrong. But just like the analogies I make, the philosophy behind things might be the same. Dig that.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Cassandra: Create a cluster on your local machine]]></title>
+    <link href="http://thoslin.github.io/cassandra-create-a-cluster-on-your-local-machine/"/>
+    <updated>2015-06-02T00:09:00+08:00</updated>
+    <id>http://thoslin.github.io/cassandra-create-a-cluster-on-your-local-machine</id>
+    <content type="html"><![CDATA[<p>This post will guide you through how to create a Cassandra cluster of multiple node on a local machine.</p>
+
+<p>First, Let&rsquo;s grab a copy of Cassandra, I&rsquo;m using a Ubuntu 12.04 box and gonna go with Cassandra 1.2.19.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mkdir test_cluster
+</span><span class='line'>cd test_cluster
+</span><span class='line'>wget http://www.us.apache.org/dist/cassandra/1.2.19/apache-cassandra-1.2.19-bin.tar.gz
+</span><span class='line'>tar xzf apache-cassandra-1.2.19-bin.tar.gz</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The package already includes everything needed to start a Cassandra node. You can start it by sudo bin/cassandra. It will use all the defaults to start a Cassandra node. With data under /var/lib. with no initial token. We&rsquo;re not going to do that. As we&rsquo;re creating multiple nodes. Each node gonna will have its own directory and configurations. That said,
+all nodes will share the same binaries comes within this tarball, but with different confs and directories for logs, data, commit logs.</p>
+
+<p>We will build a directory structure like this:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>node1
+</span><span class='line'>├── bin
+</span><span class='line'>├── commitlog
+</span><span class='line'>├── conf
+</span><span class='line'>├── data
+</span><span class='line'>├── logs
+</span><span class='line'>└── saved_caches</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now let&rsquo;s set up our first node:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cd test_cluster
+</span><span class='line'>mkdir node1
+</span><span class='line'>cd node1
+</span><span class='line'>mkdir commitlog data logs save_caches
+</span><span class='line'>cp -r ../apache-cassandra-1.2.19/bin .
+</span><span class='line'>cp -r ../apache-cassandra-1.2.19/conf .</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We need to make some customizations before we bootstrap this node. And before we jump into that, we should generate initial_token for each node, unless you prefer virtual node, which is recommended. Anyway I use the following command to generate tokens:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>python -c 'print [str(((2**64 / number_of_tokens) * i) - 2**63) for i in range(number_of_tokens)]'</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We&rsquo;re going to create two nodes:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>python -c 'print [str(((2**64 / 2) * i) - 2**63) for i in range(2)]'  
+</span><span class='line'>['-9223372036854775808', '0']</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can proceed with the setup:</p>
+
+<h4>conf/cassandra.yaml</h4>
+
+<p>The configuration file for Cassandra. There are couple items needs to be changed:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>commitlog_directory: /home/tom/test_cluster/node1/commitlog
+</span><span class='line'>data_file_directories:
+</span><span class='line'>- /home/tom/test_cluster/node1/data
+</span><span class='line'>initial_token: -9223372036854775808
+</span><span class='line'>listen_address: 127.0.0.1
+</span><span class='line'>rpc_address: 127.0.0.1
+</span><span class='line'>saved_caches_directory: /home/tom/test_cluster/node1/saved_caches</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>bin/cassandra.in.sh</h4>
+
+<p>The so-called include script. For seting environment variables needed by the start script bin/cassandra. We&rsquo;ll change following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>CASSANDRA_HOME=/home/tom/test_cluster/apache-cassandra-1.2.19
+</span><span class='line'>CASSANDRA_CONF=/home/tom/test_cluster/node1/conf</span></code></pre></td></tr></table></div></figure>
+
+
+<p>CASSANDRA_HOME is where the binaries live, CASSANDRA_CONF is where the conf for the node lives.</p>
+
+<h4>conf/log4j-server.properies</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>log4j.appender.R.File=/home/tom/test_cluster/node1/logs/system.log</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we&rsquo;re all set to start the node. Remember to set the CASSANDRA_INCLUDE to our cassandra.in.sh so that Cassandra will search the right place for confs.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>CASSANDRA_INCLUDE=/home/tom/test_cluster/node1/bin/cassandra.in.sh /home/tom/test_cluster/node1/bin/cassandra -f</span></code></pre></td></tr></table></div></figure>
+
+
+<p>OK. If everything goes soothly, you should have the node up and running. Now Let&rsquo;s set up a second node. Nothing special. Just repeat the above steps. Use &ldquo;node2&rdquo; instead of &ldquo;node1&rdquo; when changing configurations. And use a different listen_address and rpc_address:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>commitlog_directory: /home/tom/test_cluster/node2/commitlog
+</span><span class='line'>data_file_directories:
+</span><span class='line'>- /home/tom/test_cluster/node2/data
+</span><span class='line'>initial_token: 0
+</span><span class='line'>listen_address: 127.0.0.2
+</span><span class='line'>rpc_address: 127.0.0.2
+</span><span class='line'>saved_caches_directory: /home/tom/test_cluster/node2/saved_caches</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And remember to make an extra modification to <strong>conf/cassandra-env.sh</strong> to avoid port conflicts. Change default JMX_PORT to anything other than default 7199.
+And start the node. The node will automatically join the ring.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>~/test_cluster/node1 » bin/nodetool ring
+</span><span class='line'>Note: Ownership information does not include topology; for complete information, specify a keyspace
+</span><span class='line'>Datacenter: datacenter1
+</span><span class='line'>==========
+</span><span class='line'>Address    Rack        Status State   Load            Owns                Token                                      
+</span><span class='line'>                                                                          0                                          
+</span><span class='line'>127.0.0.1  rack1       Up     Normal  13.99 KB        50.00%              -9223372036854775808                      
+</span><span class='line'>127.0.0.2  rack1       Up     Normal  10.71 KB        50.00%              0              </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Alright. You got a cluster running on your local machine!</p>
+
+<p>Reference:
+<a href="http://wiki.apache.org/cassandra/GettingStarted">http://wiki.apache.org/cassandra/GettingStarted</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Simple Guide to Install StatsD and Graphite]]></title>
+    <link href="http://thoslin.github.io/simple-guide-to-install-statsd-and-graphite/"/>
+    <updated>2014-05-12T20:46:00+08:00</updated>
+    <id>http://thoslin.github.io/simple-guide-to-install-statsd-and-graphite</id>
+    <content type="html"><![CDATA[<p>I&rsquo;ve been playing around with <a href="https://github.com/etsy/statsd">StatD</a> and <a href="">Graphite</a> lately. It took me quite a while to set this stack up. So I think it worthwhile to write a post to walk through the whole installing and configuring process for future reference.</p>
+
+<p>Here is a checklist of all the softwares I&rsquo;m gonna use:</p>
+
+<ul>
+<li>StatD</li>
+<li>Graphite</li>
+<li><a href="http://grafana.org/">Grafana</a></li>
+<li><a href="http://gunicorn.org/">Gunicorn</a></li>
+<li>Nginx</li>
+<li><a href="http://supervisord.org/">Supervisor</a></li>
+</ul>
+
+
+<p>I&rsquo;m setting up all these stuff inside a Ubuntu precise32 <a href="http://files.vagrantup.com/precise32.box">Vagrant box</a>. If you are also using a Vagrant box, add these settings in your Vagrant file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'> <span class="n">config</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">network</span> <span class="ss">:forwarded_port</span><span class="p">,</span> <span class="ss">guest</span><span class="p">:</span> <span class="mi">80</span><span class="p">,</span> <span class="ss">host</span><span class="p">:</span> <span class="mi">8080</span>
+</span><span class='line'> <span class="n">config</span><span class="o">.</span><span class="n">vm</span><span class="o">.</span><span class="n">network</span> <span class="ss">:forwarded_port</span><span class="p">,</span> <span class="ss">guest</span><span class="p">:</span> <span class="mi">8125</span><span class="p">,</span> <span class="ss">host</span><span class="p">:</span> <span class="mi">8125</span><span class="p">,</span> <span class="ss">protocol</span><span class="p">:</span> <span class="s1">&#39;udp&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Let&rsquo;s ssh into vagrant and change to root first</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> vagrant ssh
+</span><span class='line'> sudo su -
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Graphite</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install git python-virtualenv python-dev
+</span><span class='line'> virtualenv /opt/graphite
+</span><span class='line'> <span class="nb">source</span> /opt/graphite/bin/activate
+</span><span class='line'> pip install https://github.com/graphite-project/ceres/tarball/master
+</span><span class='line'> pip install whisper
+</span><span class='line'> pip install carbon
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Graphite Web</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install libcairo2-dev
+</span><span class='line'> <span class="nb">cd</span> /opt/graphite
+</span><span class='line'> git clone https://github.com/graphite-project/graphite-web.git
+</span><span class='line'> <span class="nb">cd </span>graphite-web
+</span><span class='line'> git checkout 0.9.12
+</span><span class='line'> python setup.py install
+</span><span class='line'> pip install -r requirements.txt
+</span><span class='line'> django-admin.py syncdb --settings<span class="o">=</span>graphite.settings --pythonpath<span class="o">=</span>/opt/graphite/webapp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Graphite includes a wsgi file in its installation. Just copy it for later deployment</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> cp /opt/graphite/conf/graphite.wsgi.example /opt/graphite/webapp/wsgi.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Configure Carbon</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> <span class="nb">cd</span> /opt/graphite/conf/
+</span><span class='line'> cp carbon.conf.example carbon.conf
+</span><span class='line'> cat &gt; storage-schemas.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[stats]</span>
+</span><span class='line'><span class="s">pattern = ^stats.*</span>
+</span><span class='line'><span class="s">retentions = 10s:6h,1min:6d,10min:1800d</span>
+</span><span class='line'><span class="s">EOF</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The storage schema is copied from <a href="https://github.com/etsy/statsd/blob/master/docs/graphite.md#storage-schemas">StatsD</a>. Tweak it to meet your needs.</p>
+
+<h3>Install statsd</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install nodejs
+</span><span class='line'> <span class="nb">cd</span> /opt/
+</span><span class='line'> git clone https://github.com/etsy/statsd.git
+</span><span class='line'> cat &gt; statsd/config.js <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">{</span>
+</span><span class='line'><span class="s">  graphitePort: 2003</span>
+</span><span class='line'><span class="s">, graphiteHost: &quot;127.0.0.1&quot;</span>
+</span><span class='line'><span class="s">, port: 8125</span>
+</span><span class='line'><span class="s">, backends: [ &quot;./backends/graphite&quot; ]</span>
+</span><span class='line'><span class="s">, legacyNamespace: false</span>
+</span><span class='line'><span class="s">}</span>
+</span><span class='line'><span class="s">EOF</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Install Grafana</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> <span class="nb">cd</span> /opt/
+</span><span class='line'> git clone https://github.com/grafana/grafana.git
+</span><span class='line'> cp grafana/src/config.sample.js grafana/src/config.js
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Change Permissions</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> adduser tom
+</span><span class='line'> chown tom:tom -R /opt/graphite /opt/statsd /opt/grafana/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Manage process with Supervisord</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install supervisor
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/gunicorn.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:gunicorn]</span>
+</span><span class='line'><span class="s">command = /opt/graphite/bin/gunicorn -b 127.0.0.1:8080 -w 2 --pythonpath /opt/graphite/webapp/ wsgi:application</span>
+</span><span class='line'><span class="s">directory = /opt/graphite/webapp/</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/statsd.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:statsd]</span>
+</span><span class='line'><span class="s">command = /usr/bin/node stats.js config.js</span>
+</span><span class='line'><span class="s">directory = /opt/statsd/</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> cat &gt; /etc/supervisor/conf.d/carbon.conf <span class="s">&lt;&lt; EOF</span>
+</span><span class='line'><span class="s">[program:carbon]</span>
+</span><span class='line'><span class="s">command = /opt/graphite/bin/carbon-cache.py start --debug</span>
+</span><span class='line'><span class="s">user = tom</span>
+</span><span class='line'><span class="s">autostart = true</span>
+</span><span class='line'><span class="s">autorestart = true</span>
+</span><span class='line'><span class="s">redirect_stderr = true</span>
+</span><span class='line'><span class="s">EOF</span>
+</span><span class='line'> supervisorctl reload
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Set up Nginx</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>server <span class="o">{</span>
+</span><span class='line'>        listen   80;
+</span><span class='line'>
+</span><span class='line'>        location / <span class="o">{</span>
+</span><span class='line'>                add_header Access-Control-Allow-Origin <span class="s2">&quot;*&quot;</span>;
+</span><span class='line'>                proxy_pass http://127.0.0.1:8080;
+</span><span class='line'>                proxy_set_header Host <span class="nv">$host</span>;
+</span><span class='line'>                proxy_set_header X-Real-IP <span class="nv">$remote_addr</span>;
+</span><span class='line'>                proxy_set_header X-Forwarded-For <span class="nv">$proxy_add_x_forwarded_for</span>;
+</span><span class='line'>        <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>        location /grafana/ <span class="o">{</span>
+</span><span class='line'>                <span class="nb">alias</span> /opt/grafana/src/;
+</span><span class='line'>                index index.html;
+</span><span class='line'>        <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'> apt-get install nginx
+</span><span class='line'> ln -s /etc/nginx/sites-available/graphite /etc/nginx/sites-enabled/
+</span><span class='line'> rm /etc/nginx/sites-enabled/default
+</span><span class='line'> /etc/init.d/nginx restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now go to <a href="http://127.0.0.1:8080/">http://127.0.0.1:8080/</a> for Graphite and <a href="http://127.0.0.1:8080/grafana/">http://127.0.0.1:8080/grafana/</a> for Grafana.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Impostor syndrome]]></title>
+    <link href="http://thoslin.github.io/impostor-syndrome/"/>
+    <updated>2014-04-30T00:56:00+08:00</updated>
+    <id>http://thoslin.github.io/impostor-syndrome</id>
+    <content type="html"><![CDATA[<p>So I was browsing this year&rsquo;s Pycon <a href="http://pyvideo.org/category/50/pycon-us-2014">videos</a> and randomly checked out <a href="http://pyvideo.org/video/2659/its-dangerous-to-go-alone-battling-the-invisibl">this one</a> and it blew my mind off :O. Okay, I was being exaggerate. It&rsquo;s not about Python and actually a little off topic. It&rsquo;s about a syndrome called <a href="http://en.wikipedia.org/wiki/Impostor_syndrome">Impostor syndrome</a> which I&rsquo;ve never heard of before.</p>
+
+<blockquote><p>The impostor syndrome, sometimes called impostor phenomenon or fraud syndrome, is a psychological phenomenon in which people are unable to internalize their accomplishments. Despite external evidence of their competence, those with the syndrome remain convinced that they are frauds and do not deserve the success they have achieved. Proof of success is dismissed as luck, timing, or as a result of deceiving others into thinking they are more intelligent and competent than they believe themselves to be.</p></blockquote>
+
+<p>When I read this paragraph. I was like mother hecking lord of heaven. Is it not talking about me? This is just typical me ;) I was surprised to find out that there&rsquo;s literally a psychological term for this kind of thinking and a lot of people also sufferring from this like me.</p>
+
+<p>I admire the person who found this phenomenon and invented the term. I used to feel that I have some negative thinkings and I don&rsquo;t know how to describe it or more specificly I don&rsquo;t get to sit down peacefully and dig into myself and analyse what it is. Well someone did it.</p>
+
+<p>Now I kinda know why psychology should exist. It helps people to know themselves.</p>
+
+<p>As to how to deal with this syndrome. Most general advice I could get is don&rsquo;t be too honest. You need to fake it and live with it sometimes. Most people are faking it until they finally make it. There is no bad feelings. And here&rsquo;s a <a href="http://qr.ae/riYt7">story</a>:</p>
+
+<blockquote><p>At age 17, I was working backstage at an outdoor music concert, and was asked to walk out on stage in front of 15,000 people to give water bottles to all the performers. I was terrified. I asked my boss a barrage of questions:</p>
+
+<p>&ldquo;How should I do it?  Do I just put it in front of them?  Or hand it to them?  Do I walk behind the speakers or in front?&rdquo;</p>
+
+<p>My boss looked at me and said:</p>
+
+<p>&ldquo;Just go out there and pretend like you know what you&rsquo;re doing.&rdquo;</p>
+
+<p>I&rsquo;ve used that sentence as a mantra throughout my life whenever I&rsquo;m doing something for the first time, and it&rsquo;s helped me immensely. And over time I&rsquo;ve realized &ndash; everybody&rsquo;s faking it.  So now I just pretend like I know what I&rsquo;m doing, and before I know it, I actually do.</p></blockquote>
+
+<p>and good night!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Async Download with Celery]]></title>
+    <link href="http://thoslin.github.io/async-download-with-celery/"/>
+    <updated>2014-01-09T00:00:00+08:00</updated>
+    <id>http://thoslin.github.io/async-download-with-celery</id>
+    <content type="html"><![CDATA[<p>Recently my coworkers in Beijing changed our front end server from squid to varnish. I don&rsquo;t get to see the new configurations but one function on our site has broken since the change. Nginx log reports 499 status code, which means the client has closed the connection before the response is sent. So I guess probably the timeout settings was changed so this time consuming function got no chance to finish and return the response.</p>
+
+<p>Anyway this function is a pain in the ass for a long. What it does is basically exporting a large query set to a csv file. It usually takes 3 to 5 minutes to finish. The legacy solution was set a very large timeout in uwsgi, nginx and front end servers. Obviously it&rsquo;s a very ugly approach. You got the client waiting and other requests blocked.</p>
+
+<p>Here I&rsquo;m gonna refactor this function with the all mighty Celery.</p>
+
+<p>This is the pseudo code of the current django view:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span class='line'>    <span class="n">qs</span> <span class="o">=</span> <span class="n">get_queryset</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">response</span> <span class="o">=</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="n">mimetype</span><span class="o">=</span><span class="s">&#39;text/csv&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">response</span><span class="p">[</span><span class="s">&#39;Content-Disposition&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;attachment; filename=foo.csv&#39;</span>
+</span><span class='line'>    <span class="n">writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">dialect</span><span class="o">=</span><span class="n">csv</span><span class="o">.</span><span class="n">excel</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">qs</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="n">i</span><span class="o">.</span><span class="n">foo</span><span class="p">,</span> <span class="n">i</span><span class="o">.</span><span class="n">bar</span><span class="p">,</span> <span class="n">i</span><span class="o">.</span><span class="n">baz</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="n">response</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The forloop is the bottleneck here. If we can do it outside the request-response life circle, ie asynchronously, the problem will be solved. And that&rsquo;s where Celery comes in:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">from</span> <span class="nn">tasks</span> <span class="kn">import</span> <span class="n">generate_file</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span class='line'>    <span class="n">task</span> <span class="o">=</span> <span class="n">generate_file</span><span class="o">.</span><span class="n">delay</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">render_to_response</span><span class="p">(</span><span class="s">&quot;poll_for_download.html&quot;</span><span class="p">,</span>
+</span><span class='line'>                              <span class="p">{</span><span class="s">&quot;task_id&quot;</span><span class="p">:</span> <span class="n">task</span><span class="o">.</span><span class="n">task_id</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So we simply dump the whole process into this generate_file task and pass it the arguments
+it needs. The workers will start processing in the background. Meanwhile the response is sent to client side. The request is fulfilled, the resource is freed.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="nd">@task</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">generate_file</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span class='line'>    <span class="n">filename</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.csv&quot;</span> <span class="o">%</span> <span class="n">generate_file</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">id</span>
+</span><span class='line'>    <span class="n">qs</span> <span class="o">=</span> <span class="n">get_queryset</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="s">&quot;/path/to/export/&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="p">),</span> <span class="s">&quot;w+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dialect</span><span class="o">=</span><span class="n">csv</span><span class="o">.</span><span class="n">excel</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">qs</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="n">i</span><span class="o">.</span><span class="n">foo</span><span class="p">,</span> <span class="n">i</span><span class="o">.</span><span class="n">bar</span><span class="p">,</span> <span class="n">i</span><span class="o">.</span><span class="n">baz</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="n">filename</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The client will poll for result every 5 seconds(we can also leverage socket.io to build a long connection here which is more elegent) with the task_id we sent on last request.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="cp">&lt;!DOCTYPE html&gt;</span>
+</span><span class='line'><span class="nt">&lt;html&gt;</span>
+</span><span class='line'><span class="nt">&lt;head&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;title&gt;&lt;/title&gt;</span>
+</span><span class='line'><span class="nt">&lt;/head&gt;</span>
+</span><span class='line'><span class="nt">&lt;body&gt;</span>
+</span><span class='line'><span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;content&quot;</span><span class="nt">&gt;</span>Please wait. <span class="nt">&lt;span</span> <span class="na">id=</span><span class="s">&quot;loading&quot;</span><span class="nt">&gt;&lt;/span&gt;&lt;/div&gt;</span>
+</span><span class='line'><span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span> <span class="na">src=</span><span class="s">&quot;/path/to/jquery.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</span><span class='line'><span class="nt">&lt;script&gt;</span>
+</span><span class='line'>    <span class="nx">$</span><span class="p">(</span><span class="kd">function</span><span class="p">(){</span>
+</span><span class='line'>        <span class="nx">$</span><span class="p">.</span><span class="nx">ajaxSetup</span><span class="p">({</span> <span class="nx">cache</span><span class="o">:</span> <span class="kc">false</span><span class="p">,</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mi">360000</span> <span class="p">});</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s2">&quot;/poll_for_download/&quot;</span><span class="p">;</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>        <span class="p">(</span><span class="kd">function</span> <span class="nx">worker</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">$</span><span class="p">.</span><span class="nx">getJSON</span><span class="p">(</span><span class="nx">url</span><span class="o">+</span><span class="s2">&quot;?task_id=&quot;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">){</span>
+</span><span class='line'>                <span class="k">if</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">filename</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                    <span class="kd">var</span> <span class="nx">file_url</span> <span class="o">=</span> <span class="nx">url</span><span class="o">+</span><span class="s2">&quot;?filename=&quot;</span><span class="o">+</span><span class="nx">data</span><span class="p">.</span><span class="nx">filename</span><span class="p">;</span>
+</span><span class='line'>                    <span class="nx">$</span><span class="p">(</span><span class="s2">&quot;#content&quot;</span><span class="p">).</span><span class="nx">html</span><span class="p">(</span><span class="s2">&quot;If your download doesn&#39;t start automatically, please click &lt;a href=&#39;&quot;</span><span class="o">+</span><span class="nx">file_url</span><span class="o">+</span><span class="s2">&quot;&#39;&gt;here&lt;/a&gt;.&quot;</span><span class="p">);</span>
+</span><span class='line'>                    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="nx">file_url</span><span class="p">;</span>
+</span><span class='line'>                <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>                    <span class="nx">setTimeout</span><span class="p">(</span><span class="nx">worker</span><span class="p">,</span> <span class="mi">5000</span><span class="p">);</span>
+</span><span class='line'>                <span class="p">}</span>
+</span><span class='line'>            <span class="p">});</span>
+</span><span class='line'>        <span class="p">})();</span>
+</span><span class='line'>        <span class="nx">setInterval</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">i</span> <span class="o">=</span> <span class="o">++</span><span class="nx">i</span> <span class="o">%</span> <span class="mi">4</span><span class="p">;</span>
+</span><span class='line'>            <span class="nx">$</span><span class="p">(</span><span class="s2">&quot;#loading&quot;</span><span class="p">).</span><span class="nx">html</span><span class="p">(</span><span class="s2">&quot;loading&quot;</span><span class="o">+</span><span class="nb">Array</span><span class="p">(</span><span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">).</span><span class="nx">join</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">));</span>
+</span><span class='line'>        <span class="p">},</span> <span class="mi">1000</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="nt">&lt;/script&gt;</span>
+</span><span class='line'><span class="nt">&lt;/body&gt;</span>
+</span><span class='line'><span class="nt">&lt;/html&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The is the view to tell the client if the task is done and file is ready for download. If it&rsquo;s ajax request we&rsquo;ll check if the task status via task.ready() call. If it&rsquo;s ready we get the filename returned by the task and inform the user to download.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">def</span> <span class="nf">poll_for_download</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+</span><span class='line'>    <span class="n">task_id</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">GET</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;task_id&quot;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">filename</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">GET</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;filename&quot;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">is_ajax</span><span class="p">():</span>
+</span><span class='line'>        <span class="n">result</span> <span class="o">=</span> <span class="n">generate_file</span><span class="o">.</span><span class="n">AsyncResult</span><span class="p">(</span><span class="n">task_id</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">ready</span><span class="p">():</span>
+</span><span class='line'>            <span class="k">return</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&quot;filename&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">()}))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&quot;filename&quot;</span><span class="p">:</span> <span class="bp">None</span><span class="p">}))</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">try</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s">&quot;/path/to/export/&quot;</span><span class="o">+</span><span class="n">filename</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">except</span><span class="p">:</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">HttpResponseForbidden</span><span class="p">()</span>
+</span><span class='line'>    <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">response</span> <span class="o">=</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="nb">file</span><span class="p">,</span> <span class="n">mimetype</span><span class="o">=</span><span class="s">&#39;text/csv&#39;</span><span class="p">)</span>
+</span><span class='line'>        <span class="n">response</span><span class="p">[</span><span class="s">&#39;Content-Disposition&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;attachment; filename=</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">filename</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">response</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And make sure you set CELERY_IGNORE_RESULT to False and get result backend setting right. Otherwise tasks may be stuck in pending state.</p>
+
+<p>That&rsquo;s it. Happy hacking!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Dive into Django template engine]]></title>
+    <link href="http://thoslin.github.io/dive-into-django-template-engine/"/>
+    <updated>2013-08-06T00:00:00+08:00</updated>
+    <id>http://thoslin.github.io/dive-into-django-template-engine</id>
+    <content type="html"><![CDATA[<h3>Motives</h3>
+
+<p>This is an excerpt from Django documentation <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags">Writing custom template tags</a></p>
+
+<blockquote><p>Above, this document explained that the template system works in a two-step process: compiling and rendering. To define a custom template tag, you specify how the compilation works and how the rendering works.</p><p>When Django compiles a template, it splits the raw template text into ‘’nodes’‘. Each node is an instance of django.template.Node and has a render() method. A compiled template is, simply, a list of Node objects. When you call render() on a compiled template object, the template calls render() on each Node in its node list, with the given context. The results are all concatenated together to form the output of the template.</p><p>Thus, to define a custom template tag, you specify how the raw template tag is converted into a Node (the compilation function), and what the node’s render() method does.</p></blockquote>
+
+
+<p>The above is the explanation from django docs about how django template works and how to write a custom template tag. Honestly the first time I skimmed through this piece I didn&rsquo;t quite get it. and I just skipped it. While django provides decorators like simple_tag, inlucsion_tag which ease the process of writing templatetags. I found no difficulty in using templatetags. So it&rsquo;s like a black box put away in the dungeon which I never bother to open up again.</p>
+
+<p>But a few weeks ago when I was reading some templatetag code from a github repo. I found it hard to get what&rsquo;s going on. I was baffled. And this was not the first time it happened. Also as a self-proclaimed djangonaut : D. I feel this is humiliating. I feel the need to open that box and release the black magic.</p>
+
+<h3>Let the code speak</h3>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">Template</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template_string</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+</span><span class='line'>                 <span class="n">name</span><span class="o">=</span><span class="s">&#39;&lt;Unknown Template&gt;&#39;</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">template_string</span> <span class="o">=</span> <span class="n">smart_unicode</span><span class="p">(</span><span class="n">template_string</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">except</span> <span class="ne">UnicodeDecodeError</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">raise</span> <span class="n">TemplateEncodingError</span><span class="p">(</span><span class="s">&quot;Templates can only be constructed &quot;</span>
+</span><span class='line'>                                        <span class="s">&quot;from unicode or UTF-8 strings.&quot;</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">TEMPLATE_DEBUG</span> <span class="ow">and</span> <span class="n">origin</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">origin</span> <span class="o">=</span> <span class="n">StringOrigin</span><span class="p">(</span><span class="n">template_string</span><span class="p">)</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span> <span class="o">=</span> <span class="n">compile_string</span><span class="p">(</span><span class="n">template_string</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">for</span> <span class="n">subnode</span> <span class="ow">in</span> <span class="n">node</span><span class="p">:</span>
+</span><span class='line'>                <span class="k">yield</span> <span class="n">subnode</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">_render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="s">&quot;Display stage -- can be called many times&quot;</span>
+</span><span class='line'>        <span class="n">context</span><span class="o">.</span><span class="n">render_context</span><span class="o">.</span><span class="n">push</span><span class="p">()</span>
+</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">finally</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">context</span><span class="o">.</span><span class="n">render_context</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">NodeList</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
+</span><span class='line'>    <span class="c"># Set to True the first time a non-TextNode is inserted by</span>
+</span><span class='line'>    <span class="c"># extend_nodelist().</span>
+</span><span class='line'>    <span class="n">contains_nontext</span> <span class="o">=</span> <span class="bp">False</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">Node</span><span class="p">):</span>
+</span><span class='line'>                <span class="n">bit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_node</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+</span><span class='line'>            <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>                <span class="n">bit</span> <span class="o">=</span> <span class="n">node</span>
+</span><span class='line'>            <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">force_unicode</span><span class="p">(</span><span class="n">bit</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">mark_safe</span><span class="p">(</span><span class="s">u&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bits</span><span class="p">))</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">get_nodes_by_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodetype</span><span class="p">):</span>
+</span><span class='line'>        <span class="s">&quot;Return a list of all nodes of the given type&quot;</span>
+</span><span class='line'>        <span class="n">nodes</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">nodes</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">get_nodes_by_type</span><span class="p">(</span><span class="n">nodetype</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">nodes</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">render_node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">node</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This class quite explains the two-step process: compling and rendering. Basically template is broken down into a list of Node objects after compling and then django will iterate through the node list and call render method on all Node objects and join the results. That&rsquo;s the rendering.</p>
+
+<p>As compared to rendering process, compling is a more complicated process, during which template strings are translated into meaningful Python code. There are also two steps in compiling. First Lexer would tear the template string apart into small pieces(Token objects) based on predefined tokens like
+&ldquo;{{&rdquo; &ldquo;{%&rdquo;
+ for further processing.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="kn">from</span> <span class="nn">django.template.base</span> <span class="kn">import</span> <span class="n">Lexer</span><span class="p">,</span> <span class="n">Parser</span><span class="p">,</span> <span class="n">Template</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="n">lexer</span> <span class="o">=</span> <span class="n">Lexer</span><span class="p">(</span><span class="s">&quot;Hello {{ username }}, {% block content%}Welcome{</span><span class="si">% e</span><span class="s">ndblock %}&quot;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="n">tokens</span> <span class="o">=</span> <span class="n">lexer</span><span class="o">.</span><span class="n">tokenize</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
+</span><span class='line'>   <span class="o">...</span><span class="p">:</span>     <span class="k">print</span> <span class="n">token</span>
+</span><span class='line'>   <span class="o">...</span><span class="p">:</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;Hello ...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Var</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;username...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;, ...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Block</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;block content...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Text</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;Welcome...&quot;</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">Block</span> <span class="n">token</span><span class="p">:</span> <span class="s">&quot;endblock...&quot;</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Parser then picks up those tokens and change them into corresponding Node objects.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">5</span><span class="p">]:</span> <span class="n">parser</span> <span class="o">=</span> <span class="n">Parser</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">In</span> <span class="p">[</span><span class="mi">6</span><span class="p">]:</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">()</span>
+</span><span class='line'><span class="n">Out</span><span class="p">[</span><span class="mi">6</span><span class="p">]:</span>
+</span><span class='line'><span class="p">[</span><span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;Hello &#39;</span><span class="o">&gt;</span><span class="p">,</span>
+</span><span class='line'> <span class="o">&lt;</span><span class="n">Variable</span> <span class="n">Node</span><span class="p">:</span> <span class="n">username</span><span class="o">&gt;</span><span class="p">,</span>
+</span><span class='line'> <span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;, &#39;</span><span class="o">&gt;</span><span class="p">,</span>
+</span><span class='line'> <span class="o">&lt;</span><span class="n">Block</span> <span class="n">Node</span><span class="p">:</span> <span class="n">content</span><span class="o">.</span> <span class="n">Contents</span><span class="p">:</span> <span class="p">[</span><span class="o">&lt;</span><span class="n">Text</span> <span class="n">Node</span><span class="p">:</span> <span class="s">&#39;Welcome&#39;</span><span class="o">&gt;</span><span class="p">]</span><span class="o">&gt;</span><span class="p">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Let&rsquo;s take a look at Parser class:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">Parser</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tokens</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">tokens</span> <span class="o">=</span> <span class="n">tokens</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">tags</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">filters</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span class='line'>        <span class="k">for</span> <span class="n">lib</span> <span class="ow">in</span> <span class="n">builtins</span><span class="p">:</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">add_library</span><span class="p">(</span><span class="n">lib</span><span class="p">)</span>
+</span><span class='line'>    <span class="o">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>See that filters and tags. when initializing the parser, both default and custom template filters and template tags are loaded.
+When calling the parse method parser iterates through tokens and calls proper handler from self.tags and self.filters depending on token type. Here is where template filter and tags fit themself in.</p>
+
+<p>For example when a <Block token: "block content..."> is met, parser would call self.tags[&lsquo;block&rsquo;]， pass itself and token to the handler and expect a Node object returned.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="nd">@register.tag</span><span class="p">(</span><span class="s">&#39;block&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">do_block</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="n">token</span><span class="p">):</span>
+</span><span class='line'>    <span class="sd">&quot;&quot;&quot;</span>
+</span><span class='line'><span class="sd">    Define a block that can be overridden by child templates.</span>
+</span><span class='line'><span class="sd">    &quot;&quot;&quot;</span>
+</span><span class='line'>    <span class="n">bits</span> <span class="o">=</span> <span class="n">token</span><span class="o">.</span><span class="n">contents</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+</span><span class='line'>    <span class="o">...</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">BlockNode</span><span class="p">(</span><span class="n">block_name</span><span class="p">,</span> <span class="n">nodelist</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So this is what a template tag should look like. Accept parser and token and return a Node. And what a Node class has to do is to implement a render method.</p>
+
+<p>For more details, check the code lives in django/template/base.py and
+recheck <a href="https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags">the docs</a>. It should make more sense.</p>
+
+<h3>Not deep enough</h3>
+
+<p>Well. I just get this deep so far : ) If you want more there&rsquo;s an <a href="http://www.pocoo.org/~blackbird/django-templates-blogpost.html">interesting blogpost</a> written by Armin Rocher, the author of <a href="https://github.com/mitsuhiko/jinja2">Jinja2</a>, explaining why django template is slow. Come on. Let&rsquo;s dive in.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[A hack to load openx asynchronously]]></title>
+    <link href="http://thoslin.github.io/a-hack-to-load-openx-asynchronously/"/>
+    <updated>2013-07-20T22:39:00+08:00</updated>
+    <id>http://thoslin.github.io/a-hack-to-load-openx-asynchronously</id>
+    <content type="html"><![CDATA[<p>I failed to load openx asynchronously follwing their documentation. It&rsquo;s very disappointing especially when you read the fucking manual and it just doesn&rsquo;t work. So I found a way to work around it. A bit dirty but works.</p>
+
+<p>The normal openx setup is to reference the openx script in the head section. The script will issue a request to openx server to pull the ads content for the ad scripts in the body section to document.write. As you know this script will block the page load. But if you move the script to the bottom of the body, the document.write will fail.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;html&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;head&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_zones</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>                <span class="s1">&#39;top_banner&#39;</span><span class="o">:</span> <span class="mi">120</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>        <span class="c">&lt;!-- the script will issue a request to fetch the ads --&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span> <span class="na">src=</span><span class="s">&#39;http://ads.example.com/www/delivery/spcjs.php?id=7&#39;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/head&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;body&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="c1">// openx document.write the ad content</span>
+</span><span class='line'>            <span class="nx">OA_show</span><span class="p">(</span><span class="s1">&#39;top_banner&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/body&gt;</span>
+</span><span class='line'><span class="nt">&lt;/html&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>What I did is basically override the OA_show function of openx and queue the function calls and release them when the time is right.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;html&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;head&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">adQueue</span> <span class="o">=</span> <span class="p">[];</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_show</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">position</span><span class="p">,</span> <span class="nx">output</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="c1">// queue the function call and create a place holder</span>
+</span><span class='line'>                <span class="nx">adQueue</span><span class="p">.</span><span class="nx">push</span><span class="p">([</span><span class="nx">position</span><span class="p">,</span> <span class="nx">output</span><span class="p">]);</span>
+</span><span class='line'>                <span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="s2">&quot;&lt;div id=&#39;_&quot;</span><span class="o">+</span><span class="nx">position</span><span class="o">+</span><span class="s2">&quot;&#39;&gt;&lt;/div&gt;&quot;</span><span class="p">);</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/head&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;body&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;top_banner&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>                <span class="nx">OA_show</span><span class="p">(</span><span class="s1">&#39;top_banner&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span><span class='line'>            <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;/div&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&quot;text/javascript&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">OA_zones</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>                <span class="s1">&#39;top_banner&#39;</span><span class="o">:</span> <span class="mi">120</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span> <span class="na">src=</span><span class="s">&#39;http://ads.example.com/www/delivery/spcjs.php?id=7&#39;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;script </span><span class="na">type=</span><span class="s">&#39;text/javascript&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="c1">// excute function calls and display ads</span>
+</span><span class='line'>            <span class="k">while</span><span class="p">(</span><span class="nx">adQueue</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nx">adQueue</span><span class="p">.</span><span class="nx">shift</span><span class="p">();</span>
+</span><span class='line'>                <span class="kd">var</span> <span class="nx">ad</span> <span class="o">=</span> <span class="nx">OA_show</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="kc">false</span><span class="p">);</span>
+</span><span class='line'>                <span class="k">if</span><span class="p">(</span><span class="nx">ad</span><span class="p">){</span>
+</span><span class='line'>                    <span class="nx">$</span><span class="p">(</span><span class="s2">&quot;#_&quot;</span><span class="o">+</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nx">html</span><span class="p">(</span><span class="nx">ad</span><span class="p">);</span>
+</span><span class='line'>                <span class="p">}</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>        <span class="nt">&lt;/script&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/body&gt;</span>
+</span><span class='line'><span class="nt">&lt;/html&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>PS: Openx sucks!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Python unicode and bytestring revisit]]></title>
+    <link href="http://thoslin.github.io/python-unicode-and-bytestring-revisit/"/>
+    <updated>2012-03-11T00:00:00+08:00</updated>
+    <id>http://thoslin.github.io/python-unicode-and-bytestring-revisit</id>
+    <content type="html"><![CDATA[<h3>Unicode</h3>
+
+<ul>
+<li>unicode的字符集几乎包含了世界上所有文字，它用code point来表示每一个字符</li>
+<li>utf8 encoding是一种unicode的编码方法</li>
+<li>utf8使用1-4个字节来存储unicode字符，utf16使用2-4个字节，而utf32使用定长的4个字节</li>
+</ul>
+
+
+<h3>Bytestring</h3>
+
+<p>在Python中用单引号，双引号或者三引号括起来的字符都是str（确切地说是str的string literal），它们的实际值，在不同的系统不尽相同（ASCII码例外）。</p>
+
+<p>在windows下</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span> <span class="o">=</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xc8\xcb</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;cp936&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">u&#39;</span><span class="se">\u4eba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="k">print</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;cp936&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="err">人</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而在ubuntu下</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span> <span class="o">=</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">u&#39;</span><span class="se">\u4eba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="k">print</span> <span class="n">ren</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="err">人</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>可见，对于str，Python使用了系统的默认编码（而不是Python默认的ascii编码）进行编码</p>
+
+<h3>Confusion</h3>
+
+<p>Why u&#8221;你好&#8221; works while &ldquo;你好&rdquo; doesn&rsquo;t?</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;你好&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+</span><span class='line'><span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+</span><span class='line'><span class="ne">UnicodeDecodeError</span><span class="p">:</span> <span class="s">&#39;ascii&#39;</span> <span class="n">codec</span> <span class="n">can</span><span class="s">&#39;t decode byte 0xe4 in position 0: ordinal not in range(128)</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">u&quot;你好&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xbd\xa0\xe5\xa5\xbd</span><span class="s">&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>首先，对于<strong>encode</strong>操作，错误里报&#8221;..can&rsquo;t <strong>decode</strong>..&ldquo;，这个追过代码没追到，在Stackoverflow上提问，有同学帮忙解决了，看<a href="http://stackoverflow.com/a/9644206/523517">这里</a>。</p>
+
+<p>其次，对于为什么同是对literal进行encode， unicode literal就不会报错呢。</p>
+
+<p>在<a href="http://docs.python.org/release/3.0.1/whatsnew/3.0.html#text-vs-data-instead-of-unicode-vs-8-bit">What’s New In Python 3.0</a>找到了答案：</p>
+
+<blockquote><p>The biggest difference with the 2.x situation is that any attempt to mix text and data in Python 3.0 raises TypeError, whereas if you were to mix Unicode and 8-bit strings in Python 2.x, it would work if the 8-bit string happened to contain only 7-bit (ASCII) bytes, but you would get UnicodeDecodeError if it contained non-ASCII values. This value-specific behavior has caused numerous sad faces over the years.</p></blockquote>
+
+<p>这么说来还是Python 2.X自身的问题了。在2.X的版本中，string和bytes使用的数据类型都是str，所以str既是字面值(literal)，也是二进制值(binary)。</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&#39;</span><span class="se">\x61</span><span class="s">&#39;</span>
+</span><span class='line'><span class="s">&#39;a&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而且很容易造成混淆的是ASCII码的字面值和二进制值都是用字面值表示</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&#39;a&#39;</span>
+</span><span class='line'><span class="s">&#39;a&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这对于ASCII码来说无所谓，但如果str包含了非ASCII码的字符，在encode的时候就会报上述错。而在Py3k中，这两者被区分开了</p>
+
+<blockquote><p>Python 3.0 uses the concepts of text and (binary) data instead of Unicode strings and 8-bit strings. All text is Unicode; however encoded Unicode is represented as binary data. The type used to hold text is str, the type used to hold data is bytes.</p>
+
+<p>You can no longer use u&#8221;&hellip;&ldquo; literals for Unicode text. However, you must use b&rdquo;&hellip;&ldquo; literals for binary data.</p></blockquote>
+
+<p>在Py3k下运行的结果</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">u&quot;人&quot;</span>
+</span><span class='line'><span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span>
+</span><span class='line'><span class="s">u&quot;人&quot;</span>
+</span><span class='line'>   <span class="o">^</span>
+</span><span class='line'><span class="ne">SyntaxError</span><span class="p">:</span> <span class="n">invalid</span> <span class="n">syntax</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="s">&#39;人&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">type</span><span class="p">(</span><span class="s">&quot;人&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="o">&lt;</span><span class="k">class</span> <span class="err">&#39;</span><span class="nc">str</span><span class="s">&#39;&gt;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+</span><span class='line'><span class="n">b</span><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">b</span><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;人&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+</span><span class='line'><span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+</span><span class='line'><span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+</span><span class='line'><span class="ne">AttributeError</span><span class="p">:</span> <span class="s">&#39;str&#39;</span> <span class="nb">object</span> <span class="n">has</span> <span class="n">no</span> <span class="n">attribute</span> <span class="s">&#39;decode&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在<a href="https://docs.djangoproject.com/en/dev/ref/unicode/#general-string-handling">Django的字符串处理</a>中，Django假设所有的str都使用了UTF8编码，如果在某些涉及到中文的地方使用了str就很容易造成错误，所以在使用字符串这种类型的时候，最好统一使用unicode。</p>
+
+<p>最后，可以通过更改解释器的默认编码来避免上述问题，当然这种做法已经deprecated了。</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">sys</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">sys</span><span class="o">.</span><span class="n">getdefaultencoding</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;ascii&#39;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">reload</span><span class="p">(</span><span class="n">sys</span><span class="p">)</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">module</span> <span class="s">&#39;sys&#39;</span> <span class="p">(</span><span class="n">built</span><span class="o">-</span><span class="ow">in</span><span class="p">)</span><span class="o">&gt;</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">sys</span><span class="o">.</span><span class="n">setdefaultencoding</span><span class="p">(</span><span class="s">&quot;utf8&quot;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="s">&quot;人&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">str</span><span class="p">(</span><span class="s">u&quot;人&quot;</span><span class="p">)</span>
+</span><span class='line'><span class="s">&#39;</span><span class="se">\xe4\xba\xba</span><span class="s">&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="nb">unicode</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="s">&quot;人&quot;</span><span class="p">))</span>
+</span><span class='line'><span class="s">u&#39;</span><span class="se">\u4eba</span><span class="s">&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+]]></content>
+  </entry>
+  
+</feed>

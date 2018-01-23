@@ -41,6 +41,10 @@
     <ol>
         
         <li>
+          <a href="/microservice-health-check-in-kubernetes/">Microservice health check in Kubernetes</a>
+        </li>
+        
+        <li>
           <a href="/build-a-simple-protocol-over-tcp/">Build a simple protocol over TCP</a>
         </li>
         
@@ -56,16 +60,375 @@
           <a href="/cassandra-create-a-cluster-on-your-local-machine/">Cassandra: Create a cluster on your local machine</a>
         </li>
         
-        <li>
-          <a href="/simple-guide-to-install-statsd-and-graphite/">Simple Guide to Install StatsD and Graphite</a>
-        </li>
-        
     </ol>
 </div>
     <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
 </header>
     <section id="content">
       
+  
+  
+  <article>
+  <div class="meta">
+    <time>23 Jan 2018</time>
+  </div>
+  <h1>Microservice health check in Kubernetes</h1>
+  
+  <h1>TL;DR</h1>
+
+<p>Service should provide a standard endpoint for the purpose of health check and monitoring. The specification for the endpoint should conform to the requirements as elaborated in section <a href="#Requirements">Requirements</a>.</p>
+
+<h1>Background</h1>
+
+<h2>what is health check</h2>
+
+<p>A health check detects the healthy status of a service, reporting whether the service is able to handle requests or whether the service is in a bad state and should be restarted.</p>
+
+<h2>Why health check is needed</h2>
+
+<h3>High availability</h3>
+
+<p>There are many cases when a service is started/restarted
+&ndash; instance/pod restart
+&ndash; service/deployment up scaling
+&ndash; rolling update</p>
+
+<p>Under these circumstances, if a request is forwared to a service that is still in the middle of its starting/restarting process, it would probably fail. So we need to make sure a service is healthy to accept requests before adding it to the load balancer(kubernetes service), such that we could reduce the service down time and achieve high availability.</p>
+
+<h3>Service stability</h3>
+
+<p>Service running for a long period of time may fall into a bad state, in which service is unable to handle requests properly. In this case, service needs to be prohibited from receiving requests, until it is recovered either via restart or manual resurrection. Thus our service in all is stable.</p>
+
+<h3>Monitoring</h3>
+
+<p>A big part of the DevOps responsibilities is to monitor and maintain the health of running services. If a service goes down, appropriate actions should be undertaken to bring the service back to life. Health check informs the DevOps whether the service is malfunctioning.</p>
+
+<h2>Clients of health checks</h2>
+
+<ul>
+<li>Load balancer (Kubernetes service)</li>
+<li>Monitoring service (Prometheus probe)</li>
+<li>Pods (Readiness/Liveness probe)</li>
+</ul>
+
+
+<h2>Downsides of health check</h2>
+
+<p>As health check is done periodically, not in a real time manner, there still could be time gap before the unhealthy state is known to the clients. To mitigate the effect of this situation, a reasonable checking period should be set.</p>
+
+<h1>Requirements</h1>
+
+<h2>What should be checked</h2>
+
+<p>As the definition of healthy may vary from service to service, depending on the service application logics, there could be many levels of healthy:
+&ndash; the service is up
+&ndash; the service is up and the infrastructure service used by the service is healthy
+&ndash; the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy
+&ndash; the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy, smoke tests are passed</p>
+
+<p>Each service may define its own criteria, however the result of these checks should be certain, ie, the service is either healthy or not healthy, there should be no middle state.</p>
+
+<h2>How to expose health check to clients</h2>
+
+<ul>
+<li>The service should implement the health check in a RESTful API manner.</li>
+<li>The endpoint is unified as &ldquo;/health&rdquo;</li>
+</ul>
+
+
+<h2>How health check respond to clients</h2>
+
+<h3>Status code</h3>
+
+<ul>
+<li>200 OK for healthy</li>
+<li>503 Service Unavailable for unhealthy</li>
+</ul>
+
+
+<h3>Response body</h3>
+
+<p>Response body can be empty, however attaching additional information of what is checked and the result of the check is preferred</p>
+
+<h2>Security/Access control</h2>
+
+<p>The health check should be private and limited to internal access, however if it is open to public access:
+&ndash; For unauthenticated access, service should provide a basic health info, returning a UP/DOWN status
+&ndash; For authenticated access, service may provide more detail health info</p>
+
+<h1>Implementation</h1>
+
+<h2>Examples</h2>
+
+<p><strong>Service OK</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -XGET http://127.0.0.1:9000/health
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Type: application/json; charset=utf-8
+</span><span class='line'> 
+</span><span class='line'>{
+</span><span class='line'>    "status": "UP"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Service Unavailable</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -XGET http://127.0.0.1:9000/health
+</span><span class='line'>HTTP/1.1 503 Service Unavailable
+</span><span class='line'>Content-Type: application/json; charset=utf-8
+</span><span class='line'> 
+</span><span class='line'>{
+</span><span class='line'>    "status": "Down"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Authenticated access</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -XGET http://127.0.0.1:9000/health -H 'Authorization: Basic ZnNfbm9ybWFsOkBDZ0JkSjZOKz9TbmQhRytIJEI3'
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Type: application/json; charset=utf-8
+</span><span class='line'> 
+</span><span class='line'>{ 
+</span><span class='line'>  "status":"UP",
+</span><span class='line'>  "fooService":{ 
+</span><span class='line'>    "status":"UP",
+</span><span class='line'>    "description":"Foo service"
+</span><span class='line'>  },
+</span><span class='line'>  "mysql":{ 
+</span><span class='line'>    "status":"UP",
+</span><span class='line'>    "description":"MySQL Database",
+</span><span class='line'>    "hello":1
+</span><span class='line'>  }
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Libraries</h2>
+
+<h3>Java</h3>
+
+<p><a href="https://docs.spring.io/spring-boot/docs/current/reference/htmlsingle/#production-ready-health">Spring Boot Actuator</a></p>
+
+<h3>Go</h3>
+
+<p>N/A</p>
+
+<h1>Client Integration</h1>
+
+<h2>Kubernetes integration</h2>
+
+<p>Please refer to <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/">https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/</a></p>
+
+<p>Readiness and liveness probes can be used in parallel for the same container. Using both can ensure that traffic does not reach a container that is not ready for it, and that containers are restarted when they fail.</p>
+
+<h3>Readiness Probe</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>readinessProbe: # check if service in a healthy state, will remove pod from service/loadbalancer if probe failed
+</span><span class='line'>    httpGet:
+</span><span class='line'>        path: /health
+</span><span class='line'>        port: 9000
+</span><span class='line'>    initialDelaySeconds: 10 # start checking after 10s after pod starts. should set to a minimal value such that service able to receive requests as soon as it is ready
+</span><span class='line'>    periodSeconds: 10 # check health check api every 10 seconds
+</span><span class='line'>    timeoutSeconds: 3 # if response time is logger than 3 seconds, we consider the check as failed
+</span><span class='line'>    failureThreshold: 3  # if check fails for 3 times in a row, we consider the pod is in a bad state, pod will be restarted
+</span><span class='line'>    successThreshold: 1 # if check succeeds for once, we consider the pod is back to normal</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Liveness Probe</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>livenessProbe: # check if pod is in a bad state, will restart pod if probe failed
+</span><span class='line'>    httpGet:
+</span><span class='line'>        path: /health
+</span><span class='line'>        port: 9000
+</span><span class='line'>    initialDelaySeconds: 180 # start checking after 180s after pod starts, should be logger than service start time. Some service takes minutes to start, so we set a big value here.
+</span><span class='line'>    periodSeconds: 10 # check health check api every 10 seconds
+</span><span class='line'>    timeoutSeconds: 3 # if response time is logger than 3 seconds, we consider the check as failed
+</span><span class='line'>    failureThreshold: 3 # if check fails for 3 times in a row, we consider the pod is in a bad state, pod will be restarted
+</span><span class='line'>    successThreshold: 1 # if check succeeds for once, we consider the pod is back to normal</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Prometheus integration</h2>
+
+<p>Prometheus keeps polling health API constantly and store the result in its time series database. If health check metrics match a predefined alert rule, a alert will be triggered.</p>
+
+<h3>Scrape config</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>job_name: 'health-check'
+</span><span class='line'>  metrics_path: /probe
+</span><span class='line'>  params:
+</span><span class='line'>    module: [http_2xx]  # Look for a HTTP 200 response.
+</span><span class='line'>  kubernetes_sd_configs:
+</span><span class='line'>  - role: service
+</span><span class='line'> 
+</span><span class='line'>  relabel_configs:
+</span><span class='line'>    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_healthcheck]
+</span><span class='line'>      regex: true
+</span><span class='line'>      action: keep
+</span><span class='line'>    - source_labels: [__meta_kubernetes_service_name]
+</span><span class='line'>      target_label: service
+</span><span class='line'>    - source_labels: [__address__]
+</span><span class='line'>      regex: (.*)(:80)?
+</span><span class='line'>      target_label: __param_target
+</span><span class='line'>      replacement: ${1}/health
+</span><span class='line'>    - source_labels: [__param_target]
+</span><span class='line'>      regex: (.*)
+</span><span class='line'>      target_label: instance
+</span><span class='line'>      replacement: ${1}
+</span><span class='line'>    - source_labels: []
+</span><span class='line'>      regex: .*
+</span><span class='line'>      target_label: __address__
+</span><span class='line'>      replacement: blackbox-exporter-service:9115  # Blackbox exporter.</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Service annotation</h3>
+
+<p>Add <em>prometheus.io/healthcheck</em> annotation to Kubernetes service so that they could be discovered by the health check job.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>apiVersion: v1
+</span><span class='line'>kind: Service
+</span><span class='line'>metadata:
+</span><span class='line'>  annotations:
+</span><span class='line'>    prometheus.io/healthcheck: "true"
+</span><span class='line'>  name: companyprofile-service
+</span><span class='line'>  namespace: hp
+</span><span class='line'>  labels:
+</span><span class='line'>    app: companyprofile-service
+</span><span class='line'>spec:
+</span><span class='line'>  ports:
+</span><span class='line'>  - port: 80
+</span><span class='line'>    targetPort: 8087
+</span><span class='line'>    protocol: TCP
+</span><span class='line'>  selector:
+</span><span class='line'>    app: companyprofile</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Blackbox exporter config</h3>
+
+<p>Config a <em>http_2xx</em> module to scrape health api</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>scrape_configs:
+</span><span class='line'>- job_name: 'blackbox'
+</span><span class='line'>metrics_path: /probe
+</span><span class='line'>params:
+</span><span class='line'>module: [http_2xx] # Look for a HTTP 200 response.
+</span><span class='line'>static_configs:
+</span><span class='line'>- targets:
+</span><span class='line'>- http://authentication-service.hp/health # Target to probe
+</span><span class='line'>relabel_configs:
+</span><span class='line'>- source_labels: [__address__]
+</span><span class='line'>target_label: __param_target
+</span><span class='line'>- source_labels: [__param_target]
+</span><span class='line'>target_label: instance
+</span><span class='line'>- target_label: __address__
+</span><span class='line'>replacement: 127.0.0.1:9115 # Blackbox exporter.</span></code></pre></td></tr></table></div></figure>
+
+
+</article>
+  <div class="sep">&nbsp;</div>
+
   
   
   <article>
@@ -460,35 +823,6 @@
 <h4>Data consistency</h4>
 
 <p>How to ensure data are not corrupted during the upgrade? I think this should be guaranteed by Cassandra. However when doing upgrade testing, we have a script to dump all Cassandra data before and after the upgrade to ensure data are not touched. This step is taken away when we&rsquo;re doing actual upgrade.</p>
-
-</article>
-  <div class="sep">&nbsp;</div>
-
-  
-  
-  <article>
-  <div class="meta">
-    <time>08 Sep 2015</time>
-  </div>
-  <h1>Ramble on Java &amp; Session</h1>
-  
-  <p>Recently I&rsquo;ve been working on some Java stuff, from JSP, Spring MVC to Hibernate. It&rsquo;s actually not such a smooth and comfortable switch from Python to Java, especially when building a website with frameworks. A hello world page would takes more efforts in Java comparing to Python. Part of the reason may be I&rsquo;m quite a novice in the Java world, the learning curve of which is steeper than that of Python.</p>
-
-<p>However the previous experience on Python web development is not for nothing, to some extent, it helps me understand the concepts in Java web. I always try to find equivalents in Python when coming across a new thing in Java. For example, Tomcat/Jetty, the Java servlet container, is somewhat equivalent to WSGI containers like uWSGI, and servlet, is somewhat equivalent to WSGI. Hibernate is something like Django ORM/Sqlalchemy. Spring AOP is like decorators. Spring Controllers is somewhat like Flask views. Although there&rsquo;s some concepts I can&rsquo;t find analogies to, like dependencies injection, IoC. Python seems to be able to achieve those with the language support.</p>
-
-<p>During my exploration into Java web, I started building a very simple <a href="https://github.com/thoslin/spring-todo">todo list</a> app on Spring MVC, just to get my hands dirty with this famed framework. When working on a simple login function for the app, I came to think how Spring handle sessions. Down below, I use Spring Security for authentication and authorization. Again, I find it is somewhat equivalent to auth/session app in Django.</p>
-
-<p>As I recalled, Django supports couple <a href="https://docs.djangoproject.com/en/1.8/topics/http/sessions/#configuring-the-session-engine">session backends</a>, by default it uses DB to store sessions. When clients first visited, a new session is created in the session table, where all session data for that single session is stored and session keys are returned in cookies. With this session key in cookie, separate requests can share data and relate to each other, as they&rsquo;re in a same session. When clients are authenticated, a flag is set in the session to prevent further authentication.</p>
-
-<p>Apparently this is not how Spring security session works, as they don&rsquo;t have any table created. Another session implementation I remembered is the one from Flask, which uses <a href="http://werkzeug.pocoo.org/docs/0.10/contrib/securecookie/#module-werkzeug.contrib.securecookie">secure cookie</a> from werkzeug. This implementation stores user&rsquo;s session data(no session key in this case) in cookie. Session data is serialized and a checksum of the data is appended before sending back to client. Checksum is checked to make sure data is not tampered. However after inspecting the cookie, there&rsquo;s a only a cookie called JSESSIONID, which should be the id of a session, and skimming through some code of Spring security, this doesn&rsquo;t look like the approach adapted.</p>
-
-<p>So where the hell is session stored in Spring? After some googling around, I learned that A) Session is a low level api implemented in servlet container B) Tomcat stores session in memory! A little bit surprised, session is not persisted. Nevertheless in respect of performance, in memory store is absolute a winner. But the problem is also obvious, What if server crashes? What if there&rsquo;s a cluster of servers? How does it scale?</p>
-
-<p>Then I learned that, to distribute session with a cluster of servers, Tomcat supports <a href="https://tomcat.apache.org/tomcat-6.0-doc/cluster-howto.html">session replication</a>. And there&rsquo;s also a solution called &ldquo;<a href="http://stackoverflow.com/questions/10494431/sticky-and-non-sticky-sessions">sticky session</a>&rdquo;. A term never heard of before. But in fact it is just a load balance strategy that route the same client to the same server so that the client is sticked to that server, the session is kept. However as to the scenario that single server crashed, I&rsquo;m not sure how Tomcat failed over that. Maybe just failed that, session is never meant to store persistent data.</p>
-
-<p>Tracing back to the time when I was working with Django, We tend to use a different session store other than database, such as Memcache or Redis. Rereading the Django documentation on session, I found it also supports <a href="https://docs.djangoproject.com/en/1.8/topics/http/sessions/#using-cached-sessions">local memory</a>, but not recommended. Tomcat also supports different <a href="http://tomcat.apache.org/tomcat-5.5-doc/config/manager.html">persistent storage</a>.</p>
-
-<p>So I&rsquo;ve mumbled so many things about session. That is what really get me started on this post. But what I was trying to convey is that, when switching to different tech stack, surprise is not bad, as we may find that our understanding of things is not that accurate or simply wrong. But just like the analogies I make, the philosophy behind things might be the same. Dig that.</p>
 
 </article>
   <div class="sep">&nbsp;</div>
