@@ -88,10 +88,14 @@
 
 <h3>High availability</h3>
 
-<p>There are many cases when a service is started/restarted
-&ndash; instance/pod restart
-&ndash; service/deployment up scaling
-&ndash; rolling update</p>
+<p>There are many cases when a service is started/restarted</p>
+
+<ul>
+<li>instance/pod restart</li>
+<li>service/deployment up scaling</li>
+<li>rolling update</li>
+</ul>
+
 
 <p>Under these circumstances, if a request is forwared to a service that is still in the middle of its starting/restarting process, it would probably fail. So we need to make sure a service is healthy to accept requests before adding it to the load balancer(kubernetes service), such that we could reduce the service down time and achieve high availability.</p>
 
@@ -120,11 +124,15 @@
 
 <h2>What should be checked</h2>
 
-<p>As the definition of healthy may vary from service to service, depending on the service application logics, there could be many levels of healthy:
-&ndash; the service is up
-&ndash; the service is up and the infrastructure service used by the service is healthy
-&ndash; the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy
-&ndash; the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy, smoke tests are passed</p>
+<p>As the definition of healthy may vary from service to service, depending on the service application logics, there could be many levels of healthy:</p>
+
+<ul>
+<li>the service is up</li>
+<li>the service is up and the infrastructure service used by the service is healthy</li>
+<li>the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy</li>
+<li>the service is up, the infrastructure service used by the service is healthy, the dependent microservice is healthy, smoke tests are passed</li>
+</ul>
+
 
 <p>Each service may define its own criteria, however the result of these checks should be certain, ie, the service is either healthy or not healthy, there should be no middle state.</p>
 
@@ -152,9 +160,13 @@
 
 <h2>Security/Access control</h2>
 
-<p>The health check should be private and limited to internal access, however if it is open to public access:
-&ndash; For unauthenticated access, service should provide a basic health info, returning a UP/DOWN status
-&ndash; For authenticated access, service may provide more detail health info</p>
+<p>The health check should be private and limited to internal access, however if it is open to public access:</p>
+
+<ul>
+<li>For unauthenticated access, service should provide a basic health info, returning a UP/DOWN status</li>
+<li>For authenticated access, service may provide more detail health info</li>
+</ul>
+
 
 <h1>Implementation</h1>
 
