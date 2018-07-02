@@ -4,6 +4,8 @@ http://octopress.org/docs/setup/
 # set up github
 http://octopress.org/docs/deploying/github/
 
+# _deploy directory is the master(generated files)
+
 rake new_post["title"]
 rake new_page[super-awesome]
 rake generate   # Generates posts and pages into the public directory
