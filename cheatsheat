@@ -1,3 +1,6 @@
+# install octopress first
+http://octopress.org/docs/setup/
+
 rake new_post["title"]
 rake new_page[super-awesome]
 rake generate   # Generates posts and pages into the public directory
