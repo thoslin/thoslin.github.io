@@ -2,51 +2,51 @@
 <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
     <url>
         <loc>http://thoslin.github.io/python-unicode-and-bytestring-revisit/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/a-hack-to-load-openx-asynchronously/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/dive-into-django-template-engine/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/async-download-with-celery/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/impostor-syndrome/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/simple-guide-to-install-statsd-and-graphite/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/cassandra-create-a-cluster-on-your-local-machine/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/ramble-on-java-and-session/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/cassandra-a-journey-of-upgrade/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/build-a-simple-protocol-over-tcp/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/microservice-health-check-in-kubernetes/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/exception-handling-go-vs-java/</loc>
-        <lastmod>2018-07-25T14:04:12+08:00</lastmod>
+        <lastmod>2018-07-25T14:36:01+08:00</lastmod>
     </url>
     <url>
         <loc>http://thoslin.github.io/about/</loc>
@@ -62,6 +62,6 @@
     </url>
     <url>
         <loc>http://thoslin.github.io/</loc>
-        <lastmod>2018-07-25T11:27:25+08:00</lastmod>
+        <lastmod>2018-07-25T14:41:50+08:00</lastmod>
     </url>
 </urlset>
