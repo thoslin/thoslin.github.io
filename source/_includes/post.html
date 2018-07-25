@@ -7,4 +7,7 @@
   <h2><span class="tldr">TL;DR</span> {{page.tldr}}</h2>
   {% endif %}
   {{content}}
+  {% if is_index_page != true %}
+  	{% include after_footer.html %}
+  {% endif %}
 </article>
