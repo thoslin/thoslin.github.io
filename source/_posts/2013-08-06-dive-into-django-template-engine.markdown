@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Dive into Django template engine
+comments: true
 ---
 ### Motives
 This is an excerpt from Django documentation [Writing custom template tags](https://docs.djangoproject.com/en/dev/howto/custom-template-tags/#writing-custom-template-tags)

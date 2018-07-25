@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Async Download with Celery"
+comments: true
 ---
 Recently my coworkers in Beijing changed our front end server from squid to varnish. I don't get to see the new configurations but one function on our site has broken since the change. Nginx log reports 499 status code, which means the client has closed the connection before the response is sent. So I guess probably the timeout settings was changed so this time consuming function got no chance to finish and return the response.
 

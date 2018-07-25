@@ -2,6 +2,7 @@
 layout: post
 title: "Microservice health check in Kubernetes"
 date: 2018-01-23 16:31
+comments: true
 ---
 # TL;DR
 Service should provide a standard endpoint for the purpose of health check and monitoring. The specification for the endpoint should conform to the requirements as elaborated in section [Requirements](#Requirements).

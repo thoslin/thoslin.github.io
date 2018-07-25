@@ -2,7 +2,7 @@
 layout: post
 title: "Cassandra: A Journey of Upgrade"
 date: 2015-09-18 22:15
-#comments: true
+comments: true
 #categories: 
 ---
 For the past few couple months, a huge burden on my shoulder had been upgrading our Cassandra cluster from 1.2.6 to 2.1. I've been investing a lot of working hours to figure out the solution. Now that it has been done, I feel it is worthwhile to write down the whole experience.

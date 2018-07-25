@@ -2,7 +2,7 @@
 layout: post
 title: "Cassandra: Create a cluster on your local machine"
 date: 2015-06-02 00:09
-comments: false
+comments: true
 ---
 This post will guide you through how to create a Cassandra cluster of multiple node on a local machine.
 

@@ -2,6 +2,7 @@
 layout: post
 title: "Impostor syndrome"
 date: 2014-04-30 00:56
+comments: true
 ---
 So I was browsing this year's Pycon [videos](http://pyvideo.org/category/50/pycon-us-2014) and randomly checked out [this one](http://pyvideo.org/video/2659/its-dangerous-to-go-alone-battling-the-invisibl) and it blew my mind off :O. Okay, I was being exaggerate. It's not about Python and actually a little off topic. It's about a syndrome called [Impostor syndrome](http://en.wikipedia.org/wiki/Impostor_syndrome) which I've never heard of before.
 

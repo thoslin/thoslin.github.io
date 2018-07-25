@@ -2,7 +2,7 @@
 layout: post
 title: "Build a simple protocol over TCP"
 date: 2015-09-24 08:13
-#comments: true
+comments: true
 categories:
 ---
 Disclaimer: I am not an expert of TCP or designing protocols, this post is just about my learning experience of building a protocols over TCP :)

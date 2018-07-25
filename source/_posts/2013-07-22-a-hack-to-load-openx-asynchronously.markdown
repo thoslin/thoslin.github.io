@@ -2,6 +2,7 @@
 layout: post
 title: "A hack to load openx asynchronously"
 date: 2013-07-20 22:39
+comments: true
 ---
 I failed to load openx asynchronously follwing their documentation. It's very disappointing especially when you read the fucking manual and it just doesn't work. So I found a way to work around it. A bit dirty but works.
 

@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Python unicode and bytestring revisit"
+comments: true
 ---
 
 ### Unicode
