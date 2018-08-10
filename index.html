@@ -42,6 +42,10 @@
     <ol>
         
         <li>
+          <a href="/attack-vectors-in-oauth-2-dot-0/">Attack Vectors in OAuth 2.0</a>
+        </li>
+        
+        <li>
           <a href="/exception-handling-go-vs-java/">Exception Handling: Go vs. Java</a>
         </li>
         
@@ -57,16 +61,64 @@
           <a href="/cassandra-a-journey-of-upgrade/">Cassandra: A Journey of Upgrade</a>
         </li>
         
-        <li>
-          <a href="/ramble-on-java-and-session/">Ramble on Java &amp; Session</a>
-        </li>
-        
     </ol>
 </div>
     <h4>Site designed by <a target="_blank" href="https://github.com/orourkedesign">@orourkedesign</a>.
 </header>
     <section id="content">
       
+  
+  
+  
+  <article>
+  <div class="meta">
+    <time>10 Aug 2018</time>
+  </div>
+  <h1>Attack Vectors in OAuth 2.0</h1>
+  
+  <p>Yesterday I was checking out which OAuth grant type is best fit for mobile applications. It turns out PKCE(Proof Key of Code Exchange) has become the de facto standard.</p>
+
+<h2>The issue with implicit grant</h2>
+
+<p>The flow for <a href="https://www.oauth.com/playground/implicit.html">implicit grant</a> is fairly simple.</p>
+
+<ul>
+<li>User agent redirects resource owner to authorization server</li>
+<li>Resource owner authorizes the access</li>
+<li>User agent redirects resource owner back to the client application with an access token in URL fragment.</li>
+</ul>
+
+
+<p>In step 1, user agent, ie, mobile application, will normally open the browser to redirect resource owner to authorization server. The security implication here is that, using a web-view inside the application may expose resource owner credentials to application.</p>
+
+<p>The attack vectors lie in step 3 after resource owner authorizes the access, the browser will redirect resource owner back to the application. For most mobile platforms, this is done by a special URL pattern, such as “com.foo.bar://callback-url”, applications bind handlers to this URL. So there’s a chance a malicious application also binds a handler to this URL, and gets the token in the URL fragment.</p>
+
+<h2>Don’t ignore state parameter</h2>
+
+<p>Another attack vector is that, a malicious user places his own access token in the URL fragment. Now the user’s session is replaced with the attacker’s session. The resource the user creates will actually show up in attacker’s account.</p>
+
+<p>Therefore it is crucial for the client application to verify the state parameter after the redirect, to ensure that the session is the one resource owner initiates. The client may generate and store the state in cookie or session before the redirect to authorization server.</p>
+
+<p>This is also the case for <a href="https://www.oauth.com/playground/authorization-code.html">authorization code grant</a> <a href="https://aaronparecki.com/oauth-2-simplified/#single-page-apps">without client_secret</a> (which is a trend to replace implicit grant). The attacker may authorize the authorization server with his own credentials, normally the redirect will happen. However the attacker traps the redirect, copy the URL, and send it to the target user, or initialize. A victim may already login, and clicks on the link, now he gets the attacker’s token, and session is replaced.</p>
+
+<h2>PKCE to the rescue</h2>
+
+<p>The implicit grant and the authorization code grant are both vulnerable if resource owner is redirected to a malicious client. But can we enforce some checks in the authorization server make sure the request comes from a valid client?</p>
+
+<p><a href="https://www.oauth.com/playground/authorization-code-with-pkce.html">PKCE</a> solves this by introducing proof key for code exchange. It is an enhancement on authorization code grant thus the workflow is about the same, except the client needs to</p>
+
+<ul>
+<li>generate a key, which a random string and should be stored in the client.</li>
+<li>generate a challenge from the key, which is base64encode(sha256(key)), should be sent to authorization server.</li>
+</ul>
+
+
+<p>So the idea here is that client sends the challenge in step 1 and prove it has the key to generate the  challenge when exchanging for token in step 3. Such that a malicious client is unable to obtain a code without the key, as it is only held by the righteous client.</p>
+
+  
+</article>
+  <div class="sep">&nbsp;</div>
+
   
   
   
@@ -486,256 +538,6 @@ While in go, with the ability to return multiple values, go informs the caller b
 </span><span class='line'>      fail_if_matches_regexp: []
 </span><span class='line'>      fail_if_not_matches_regexp: []</span></code></pre></td></tr></table></div></figure>
 
-
-  
-</article>
-  <div class="sep">&nbsp;</div>
-
-  
-  
-  
-  <article>
-  <div class="meta">
-    <time>24 Sep 2015</time>
-  </div>
-  <h1>Build a simple protocol over TCP</h1>
-  
-  <p>Disclaimer: I am not an expert of TCP or designing protocols, this post is just about my learning experience of building a protocols over TCP :)</p>
-
-<h4>A rookie mistake</h4>
-
-<p>When I was playing with sockets. A rookie mistake I made is assuming that each message send implies a message receive, like the following example:</p>
-
-<p>server.py</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
-</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span><span class="p">))</span>
-</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
-</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-</span><span class='line'>    <span class="n">data</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
-</span><span class='line'>        <span class="k">break</span>
-</span><span class='line'>    <span class="k">print</span> <span class="s">&quot;Received: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">data</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>client.py</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">socket_address</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span>
-</span><span class='line'><span class="n">connection</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">socket_address</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Hello there!&quot;</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Bye bye!&quot;</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run the client. I got the following output:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">Receive</span><span class="p">:</span> <span class="n">Hello</span> <span class="n">there</span><span class="err">!</span><span class="n">Bye</span> <span class="n">bye</span><span class="err">!</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>.</p>
-
-<p>So two sends result in one receive, not two receives as expected. Hah. This is a misunderstanding of how TCP works.</p>
-
-<p>TCP is a stream oriented protocol, not a packet/message oriented protocol like UDP. I&rsquo;d like to use this analogy: TCP is like making a phone call, a connection must be established before both end is able to talk, and when you talk, data stream flows on the connection. While UDP is like you&rsquo;re sending a text message.</p>
-
-<h4>The boundary</h4>
-
-<p>However this rookie mistake got me thinking, when we&rsquo;re building an application on top of TCP socket, for example, a chatting application, how do we know where each message ends since they are a stream of data? Where&rsquo;s the boundary of two messages? There must be something up on the application level.</p>
-
-<h4>1. Delimiter</h4>
-
-<p>Back to the phone call analogy, let&rsquo;s say foo is reading a poem to bar over the phone, how does bar know when foo finishes a line? how does bar know if foo finishes the whole poem? Does the wired connection do that for you? NO. But what we know from common sense is that, there&rsquo;s a pause when you finish a line, and maybe a longer pause when you finish the poem. Similarly, maybe we can put a pause in the end of each message? Just like <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2">\r\n</a> in HTTP headers.</p>
-
-<p>Here is an improved version of the previous code using \r\n as the delimiter:</p>
-
-<p>server.py</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
-</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span><span class="p">))</span>
-</span><span class='line'><span class="n">sock</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-</span><span class='line'>    <span class="n">data</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
-</span><span class='line'>        <span class="k">break</span>
-</span><span class='line'>    <span class="k">else</span><span class="p">:</span>
-</span><span class='line'>        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">):</span>
-</span><span class='line'>            <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
-</span><span class='line'>                <span class="k">print</span> <span class="s">&quot;Received: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">line</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>client.py</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">socket</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">socket_address</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">(),</span> <span class="mi">2333</span>
-</span><span class='line'><span class="n">connection</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">socket_address</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Hello there!</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Bye bye!</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">)</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we got the separate output:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">Received</span><span class="p">:</span> <span class="n">Hello</span> <span class="n">there</span><span class="err">!</span>
-</span><span class='line'><span class="n">Received</span><span class="p">:</span> <span class="n">Bye</span> <span class="n">bye</span><span class="err">!</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The downside of this approach is that, when dealing with a message that is longer than 1024, you just get part of the message. We might need a buffer to receive message until we get a delimiter.</p>
-
-<h4>2. Fix length or Prefix length</h4>
-
-<p>What if messages are all in fix length? Short message can be filled with empty string, something like:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;Hello there!&quot;</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">140</span><span class="p">))</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So server just need to keep reading fix length of bytes from socket. This works. However there is still a hard limit on the length of the message.</p>
-
-<p>What if we tell the server the length of each message beforehand? We can do that by prefixing the message with the length of it. Yes! Just like the &ldquo;Content-Length&rdquo; header in HTTP.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">make_message</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="n">x</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">make_message</span><span class="p">(</span><span class="s">&quot;Hello there!&quot;</span><span class="p">))</span>
-</span><span class='line'><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">make_message</span><span class="p">(</span><span class="s">&quot;Bye bye!&quot;</span><span class="p">))</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Here we prefix each message 4 bytes string indicating the length of the message. And server will first read the 4 bytes to get the length, then read as much bytes as that. The recvall function is to get the certain length of data, otherwise with simply recv, there&rsquo;s a chance we get just part of the transmitted data. Although in local machine the chance is low.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">connection</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">def</span> <span class="nf">recvall</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">remains</span><span class="p">):</span>
-</span><span class='line'>    <span class="n">buf</span> <span class="o">=</span> <span class="s">&quot;&quot;</span>
-</span><span class='line'>    <span class="k">while</span> <span class="n">remains</span><span class="p">:</span>
-</span><span class='line'>        <span class="n">data</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">remains</span><span class="p">)</span>
-</span><span class='line'>        <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
-</span><span class='line'>            <span class="k">break</span>
-</span><span class='line'>        <span class="n">buf</span> <span class="o">+=</span> <span class="n">data</span>
-</span><span class='line'>        <span class="n">remains</span> <span class="o">-=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">return</span> <span class="n">buf</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-</span><span class='line'>    <span class="n">data</span> <span class="o">=</span> <span class="n">recvall</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
-</span><span class='line'>        <span class="k">break</span>
-</span><span class='line'>    <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-</span><span class='line'>    <span class="n">message</span> <span class="o">=</span> <span class="n">recvall</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">print</span> <span class="s">&quot;Received: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">message</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>At this point, we have something like a protocol over the TCP layer, which is able to achieve the original goal.</p>
-
-<h4>Native protocol of Cassandra</h4>
-
-<p>Now that we have a protocol of our own, although simple and naive, I&rsquo;d like to take a look at some serious protocol that built on TCP. Since I&rsquo;ve been working with Cassandra a lot lately. I might as well just check their protocol.</p>
-
-<p><a href="https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol.spec;hb=refs/heads/cassandra-1.2">CQL</a> is the protocol of Cassandra, which is built on TCP:</p>
-
-<p><quote>
-  The CQL binary protocol is a frame based protocol. Frames are defined as:</p>
-
-<pre><code>  0         8        16        24        32
-  +---------+---------+---------+---------+
-  | version |  flags  | stream  | opcode  |
-  +---------+---------+---------+---------+
-  |                length                 |
-  +---------+---------+---------+---------+
-  |                                       |
-  .            ...  body ...              .
-  .                                       .
-  .                                       .
-  +----------------------------------------
-</code></pre>
-
-<p></quote></p>
-
-<p>Frames can be regarded as what we called messages in previous examples. Except the first 32 bits, the length and body part is just what we used. So our approach looks practical.</p>
-
-<p>So that&rsquo;s it, there must be more technical details regarding building a full-fledged protocol, but some fundamental things should work the same.</p>
 
   
 </article>

@@ -4,7 +4,7 @@
   <title><![CDATA[Eat Pray Code]]></title>
   <link href="http://thoslin.github.io/atom.xml" rel="self"/>
   <link href="http://thoslin.github.io/"/>
-  <updated>2018-07-25T14:49:59+08:00</updated>
+  <updated>2018-08-10T17:50:26+08:00</updated>
   <id>http://thoslin.github.io/</id>
   <author>
     <name><![CDATA[Tom]]></name>
@@ -12,6 +12,52 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Attack Vectors in OAuth 2.0]]></title>
+    <link href="http://thoslin.github.io/attack-vectors-in-oauth-2-dot-0/"/>
+    <updated>2018-08-10T17:44:00+08:00</updated>
+    <id>http://thoslin.github.io/attack-vectors-in-oauth-2-dot-0</id>
+    <content type="html"><![CDATA[<p>Yesterday I was checking out which OAuth grant type is best fit for mobile applications. It turns out PKCE(Proof Key of Code Exchange) has become the de facto standard.</p>
+
+<h2>The issue with implicit grant</h2>
+
+<p>The flow for <a href="https://www.oauth.com/playground/implicit.html">implicit grant</a> is fairly simple.</p>
+
+<ul>
+<li>User agent redirects resource owner to authorization server</li>
+<li>Resource owner authorizes the access</li>
+<li>User agent redirects resource owner back to the client application with an access token in URL fragment.</li>
+</ul>
+
+
+<p>In step 1, user agent, ie, mobile application, will normally open the browser to redirect resource owner to authorization server. The security implication here is that, using a web-view inside the application may expose resource owner credentials to application.</p>
+
+<p>The attack vectors lie in step 3 after resource owner authorizes the access, the browser will redirect resource owner back to the application. For most mobile platforms, this is done by a special URL pattern, such as “com.foo.bar://callback-url”, applications bind handlers to this URL. So there’s a chance a malicious application also binds a handler to this URL, and gets the token in the URL fragment.</p>
+
+<h2>Don’t ignore state parameter</h2>
+
+<p>Another attack vector is that, a malicious user places his own access token in the URL fragment. Now the user’s session is replaced with the attacker’s session. The resource the user creates will actually show up in attacker’s account.</p>
+
+<p>Therefore it is crucial for the client application to verify the state parameter after the redirect, to ensure that the session is the one resource owner initiates. The client may generate and store the state in cookie or session before the redirect to authorization server.</p>
+
+<p>This is also the case for <a href="https://www.oauth.com/playground/authorization-code.html">authorization code grant</a> <a href="https://aaronparecki.com/oauth-2-simplified/#single-page-apps">without client_secret</a> (which is a trend to replace implicit grant). The attacker may authorize the authorization server with his own credentials, normally the redirect will happen. However the attacker traps the redirect, copy the URL, and send it to the target user, or initialize. A victim may already login, and clicks on the link, now he gets the attacker’s token, and session is replaced.</p>
+
+<h2>PKCE to the rescue</h2>
+
+<p>The implicit grant and the authorization code grant are both vulnerable if resource owner is redirected to a malicious client. But can we enforce some checks in the authorization server make sure the request comes from a valid client?</p>
+
+<p><a href="https://www.oauth.com/playground/authorization-code-with-pkce.html">PKCE</a> solves this by introducing proof key for code exchange. It is an enhancement on authorization code grant thus the workflow is about the same, except the client needs to</p>
+
+<ul>
+<li>generate a key, which a random string and should be stored in the client.</li>
+<li>generate a challenge from the key, which is base64encode(sha256(key)), should be sent to authorization server.</li>
+</ul>
+
+
+<p>So the idea here is that client sends the challenge in step 1 and prove it has the key to generate the  challenge when exchanging for token in step 3. Such that a malicious client is unable to obtain a code without the key, as it is only held by the righteous client.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Exception Handling: Go vs. Java]]></title>
