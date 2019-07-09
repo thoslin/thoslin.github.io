@@ -1,7 +1,7 @@
 <html>
   <head>
     
-      <title>Exception Handling: Go vs. Java | Eat Pray Code</title>
+      <title>Talk: How We Use Istio and OPA for Authorization | Eat Pray Code</title>
     
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -68,46 +68,18 @@
     <section id="content">
       <article>
   <div class="meta">
-    <time>25 Jul 2018</time>
+    <time>11 Jul 2019</time>
   </div>
-  <h1>Exception Handling: Go vs. Java</h1>
+  <h1>Talk: How We Use Istio and OPA for Authorization</h1>
   
-  <p>After reading this post <a href="https://dave.cheney.net/2012/01/18/why-go-gets-exceptions-right">Why Go Gets Exceptions Right</a>, I have some thoughts and would like to write down here.</p>
+  <p>I gave a <a href="https://kccncosschn19eng.sched.com/event/910e362313be9cf58fce00a9b92a5adf">lightning talk</a> in <a href="https://www.lfasiallc.com/events/kubecon-cloudnativecon-china-2019/">KubeCon 2019 Shanghai</a> about how we use <a href="https://istio.io/">istio</a> and <a href="https://www.openpolicyagent.org/docs/latest">OPA</a> for authorization.</p>
 
-<p>The first thing bumps to my head is why we&rsquo;re using exceptions in the first place. The answer seems clear, we want to signal the caller of our function that something went wrong.</p>
+<p>The video is available on <a href="https://www.youtube.com/watch?v=ctr2bVmzGpk">Youtube</a> and the slides can be found <a href="https://static.sched.com/hosted_files/kccncosschn19eng/87/how-we-use-istio-and-opa-for-authorization.pdf">here</a>.</p>
 
-<p>So how do we do it? In Java we have exceptions, specially checked exceptions with <code>throws</code> keyword in the method signature. Checked means it will be checked by the compiler at the compile time, as a way to inform the caller that certain exceptions are expected to be thrown from the method.
-While in go, with the ability to return multiple values, go informs the caller by returning an <code>error</code>. It is part of the function signature, the contract between the function and the caller, the caller should receive the result and the error correctly, otherwise the program won&rsquo;t compile.</p>
-
-<p>Second thing I&rsquo;m wondering is that does Go really handle exceptions better than Java? Let&rsquo;s see how Go and Java handle them differently.</p>
-
-<p>If we categorize the exceptions into following categories, language-ignostically(they&rsquo;re all concepts from Java, but can be interchangable for discussion):</p>
-
-<ul>
-<li><em>Checked exceptions</em>. Something goes wrong, unpreventable but recoverable.</li>
-<li><em>Runtime exceptions</em>. Something may go wrong, but preventable.</li>
-<li><em>Errors</em>. Soemthing goes wrong, unpreventable and unrecoverable.</li>
-</ul>
+<p></p>
 
 
-<p><strong><em>Checked exceptions</em></strong></p>
-
-<p>As I mentioned above, checked exceptions are enforced for both Java and Go. And for the caller, they should handle the exception properly. Either try-catch in Java, or check if err is not nil in Go. And in go, you can ignore the error by using <code>_</code>, similarly, in Java you can try-catch the exception and does nothing about it.</p>
-
-<p><strong><em>Runtime exceptions</em></strong></p>
-
-<p>Runtime exceptions is the exceptions you can’t always detect at the compile time. It could be a null pointer exception, or a index out of bounds exception. In Java, as runtime exception is unchecked, you don&rsquo;t need to explicitly throws them in the method. In Go, you don&rsquo;t need to specify an error in the return statement. And for the caller, you have no idea what went wrong, you basically do nothing with it. Or you can explicitly try-catch in Java or <a href="https://blog.golang.org/defer-panic-and-recover">defer-recover</a> in Go, otherwise, for Java the exception will bubble up the call stack until some exception handler catches it. And for Go, the panicking will also climb up the stack of the current goroutine until some recover happens. If none of this happens until main method, the program crashes.</p>
-
-<p><strong><em>Error</em></strong></p>
-
-<p>Errors are unpreventable and unrecoverable exceptions, like out of memory error. In Java you don&rsquo;t catch it and In Go you should just let it panic.</p>
-
-<p>So viewing from this angle, the way Go and Java handles exceptions are almost the same. That&rsquo;s why I don&rsquo;t think Go is better than Java in this regard. On the contrary, there are things I don’t like about error handling in Go:</p>
-
-<ul>
-<li>Not like Java, Go does not grap the error stacktrace by default. You may say it is not that expensive as Java and give you some flexibilities. However it is not good for debugging. If you’d like to print the stacktrace, you&rsquo;ll have to use libraries like github.com/pkg/errors to wrap the error with stack trace.</li>
-<li>Not like Java, Go does not differentiate errors in function signature, you just have one error, it is like <code>throws Exception</code> in Java. You don’t know the exact errors you are expecting. Explicit is better than implicit.</li>
-</ul>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/ctr2bVmzGpk" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 
   
@@ -119,8 +91,8 @@ While in go, with the ability to return multiple values, go informs the caller b
       
         
         // var disqus_developer = 1;
-        var disqus_identifier = 'http://thoslin.github.io/exception-handling-go-vs-java/';
-        var disqus_url = 'http://thoslin.github.io/exception-handling-go-vs-java/';
+        var disqus_identifier = 'http://thoslin.github.io/talk-how-we-use-istio-and-opa-for-authorization/';
+        var disqus_url = 'http://thoslin.github.io/talk-how-we-use-istio-and-opa-for-authorization/';
         var disqus_script = 'embed.js';
       
       var disqus_config = function () {

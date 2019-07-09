@@ -4,7 +4,7 @@
   <title><![CDATA[Eat Pray Code]]></title>
   <link href="http://thoslin.github.io/atom.xml" rel="self"/>
   <link href="http://thoslin.github.io/"/>
-  <updated>2018-08-10T17:50:26+08:00</updated>
+  <updated>2019-07-09T16:13:25+08:00</updated>
   <id>http://thoslin.github.io/</id>
   <author>
     <name><![CDATA[Tom]]></name>
@@ -12,6 +12,23 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Talk: How We Use Istio and OPA for Authorization]]></title>
+    <link href="http://thoslin.github.io/talk-how-we-use-istio-and-opa-for-authorization/"/>
+    <updated>2019-07-11T14:44:00+08:00</updated>
+    <id>http://thoslin.github.io/talk-how-we-use-istio-and-opa-for-authorization</id>
+    <content type="html"><![CDATA[<p>I gave a <a href="https://kccncosschn19eng.sched.com/event/910e362313be9cf58fce00a9b92a5adf">lightning talk</a> in <a href="https://www.lfasiallc.com/events/kubecon-cloudnativecon-china-2019/">KubeCon 2019 Shanghai</a> about how we use <a href="https://istio.io/">istio</a> and <a href="https://www.openpolicyagent.org/docs/latest">OPA</a> for authorization.</p>
+
+<p>The video is available on <a href="https://www.youtube.com/watch?v=ctr2bVmzGpk">Youtube</a> and the slides can be found <a href="https://static.sched.com/hosted_files/kccncosschn19eng/87/how-we-use-istio-and-opa-for-authorization.pdf">here</a>.</p>
+
+<p></p>
+
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/ctr2bVmzGpk" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Attack Vectors in OAuth 2.0]]></title>
